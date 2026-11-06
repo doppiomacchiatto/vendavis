@@ -1,0 +1,23 @@
+{
+  "name": "sf-metadata-explorer",
+  "version": "2.0.0",
+  "description": "Salesforce Metadata Explorer — Tauri + React + FastAPI",
+  "scripts": {
+    "dev":            "concurrently \"npm run dev:backend\" \"npm run tauri:dev\"",
+    "dev:frontend":   "cd frontend && npm run dev",
+    "dev:backend":    "cd backend && .venv/bin/uvicorn main:app --host 0.0.0.0 --port 7891 --reload",
+    "tauri:dev":      "tauri dev",
+    "tauri:build":    "npm run build:backend && tauri build",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend":  "cd backend && .venv/bin/pyinstaller sf_backend.spec --distpath dist --clean",
+    "postinstall":    "cd frontend && npm install"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "concurrently":    "^8.2.2",
+    "wait-on":         "^7.2.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  }
+}

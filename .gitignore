@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+backend/.venv/
+backend/dist/
+backend/build/
+backend/*.spec
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Electron Builder
+dist/
+release/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tauri
+src-tauri/target/
+
+# App data
+*.db
+
+# Secrets — never commit these
+.anthropic_key
+*.anthropic_key
+.vendavis_config.json
+.sf_tools_config.json

@@ -1,0 +1,29 @@
+[package]
+name = "sf-metadata-explorer"
+version = "2.0.0"
+description = "SF Metadata Explorer"
+authors = ["jsantisi"]
+edition = "2021"
+
+[[bin]]
+name = "sf-metadata-explorer"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
