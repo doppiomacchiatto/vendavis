@@ -63,7 +63,9 @@ export async function api(path, opts = {}) {
     let body = "";
     try { body = await res.text(); } catch {}
     let detail = body;
-    try { detail = JSON.parse(body)?.detail || body; } catch {}
+    let code;
+    try { const j = JSON.parse(body); detail = j?.detail || body; code = j?.code; } catch {}
+    if (code === "session_expired") throw new Error(detail);
     throw new Error(`HTTP ${res.status} ${res.statusText} — ${path}\n${detail}`);
   }
   return res.json();
@@ -84,7 +86,13 @@ export async function apiStream(path, body, onDelta, onDone, onError) {
     onError(`Cannot reach backend: ${e?.message}`);
     return;
   }
-  if (!res.ok) { onError(await res.text()); return; }
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = text;
+    try { msg = JSON.parse(text)?.detail || text; } catch {}
+    onError(msg);
+    return;
+  }
   const reader = res.body.getReader();
   const dec    = new TextDecoder();
   let buf = "";

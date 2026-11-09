@@ -14,10 +14,13 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import uvicorn
 
+from sf_cli import SessionExpiredError
 from sf_cli import (list_orgs, list_objects, describe_object, run_apex_anonymous,
                     list_profiles, list_permission_sets,
                     get_fls_for_profile, get_object_perms_for_profile,
@@ -38,6 +41,31 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=False,
 )
+
+def _session_expired_response(exc: SessionExpiredError) -> JSONResponse:
+    return JSONResponse(
+        status_code=401,
+        content={"detail": str(exc), "code": "session_expired", "alias": exc.alias},
+    )
+
+
+@app.exception_handler(SessionExpiredError)
+async def _on_session_expired(request, exc: SessionExpiredError):
+    return _session_expired_response(exc)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _on_http_exception(request, exc: StarletteHTTPException):
+    # Most routes do `except Exception as e: raise HTTPException(500, str(e))`.
+    # Python chains the original error as __context__, so an expired Salesforce
+    # session is still recognisable here and becomes a 401 with a clear message.
+    cause = exc.__context__
+    while cause is not None and not isinstance(cause, SessionExpiredError):
+        cause = cause.__context__
+    if isinstance(cause, SessionExpiredError):
+        return _session_expired_response(cause)
+    return await http_exception_handler(request, exc)
+
 
 _ai = AIClient()
 

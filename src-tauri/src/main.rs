@@ -107,6 +107,23 @@ fn get_backend_port(state: State<'_, BackendPort>) -> u16 {
     state.0
 }
 
+/// Turn a failed backend response into a readable error string.
+/// FastAPI errors look like {"detail": "..."}; session-expired errors carry
+/// code "session_expired" and are passed through as just the message so the
+/// UI can show "run `sf org login web --alias X`" without an HTTP prefix.
+fn http_error(status: reqwest::StatusCode, body: &serde_json::Value) -> String {
+    let detail = match body.get("detail") {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(other) => other.to_string(),
+        None => body.to_string(),
+    };
+    if body.get("code").and_then(|c| c.as_str()) == Some("session_expired") {
+        detail
+    } else {
+        format!("HTTP {}: {}", status, detail)
+    }
+}
+
 /// Proxy GET requests from the WebView through Rust (no CSP restrictions)
 #[tauri::command]
 async fn api_get(
@@ -124,7 +141,7 @@ async fn api_get(
         .await
         .map_err(|e| format!("JSON parse error: {}", e))?;
     if !status.is_success() {
-        return Err(format!("HTTP {}: {:?}", status, body));
+        return Err(http_error(status, &body));
     }
     Ok(body)
 }
@@ -151,7 +168,7 @@ async fn api_post(
         .await
         .map_err(|e| format!("JSON parse error: {}", e))?;
     if !status.is_success() {
-        return Err(format!("HTTP {}: {:?}", status, result));
+        return Err(http_error(status, &result));
     }
     Ok(result)
 }

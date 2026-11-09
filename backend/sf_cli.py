@@ -4,8 +4,11 @@ sf_cli.py — Salesforce CLI wrappers for sf_fls_exporter.
 All functions here are pure (no UI), thread-safe, and importable independently.
 """
 
+from __future__ import annotations
+
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -23,6 +26,42 @@ SUBPROCESS_KWARGS = {
     "errors": "replace",
     "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
 }
+
+
+class SessionExpiredError(RuntimeError):
+    """The org's stored session/refresh token is no longer valid."""
+
+    def __init__(self, alias: str | None = None):
+        self.alias = alias
+        target = f"org '{alias}'" if alias else "this org"
+        login = f"sf org login web --alias {alias}" if alias else "sf org login web"
+        super().__init__(
+            f"The Salesforce session for {target} has expired or been revoked. "
+            f"Re-authenticate by running:  {login}"
+        )
+
+
+_SESSION_EXPIRED_RE = re.compile(
+    r"expired access/refresh token|invalid_grant|INVALID_SESSION_ID|"
+    r"Session expired or invalid|Unable to refresh session|"
+    r"authenticating with the refresh token",
+    re.IGNORECASE,
+)
+
+
+def _is_session_expired(text: str) -> bool:
+    return bool(text and _SESSION_EXPIRED_RE.search(text))
+
+
+def _org_from_args(args) -> str | None:
+    """Pull the target org alias out of sf CLI args, if one was given."""
+    args = list(args)
+    for i, a in enumerate(args):
+        if a in ("--target-org", "-o", "-u", "--target-dev-hub", "-v") and i + 1 < len(args):
+            return args[i + 1]
+        if a.startswith("--target-org="):
+            return a.split("=", 1)[1]
+    return None
 
 
 def _augmented_path() -> str:
@@ -63,9 +102,18 @@ def _sf(*args, timeout=120):
     # warnings (e.g. "update available") even when the command succeeded and
     # stdout contains valid JSON output.
     try:
-        return json.loads(clean)
+        data = json.loads(clean)
     except json.JSONDecodeError:
-        pass
+        data = None
+
+    if isinstance(data, dict) and data.get("status") not in (0, None):
+        if _is_session_expired(f"{data.get('name', '')} {data.get('message', '')}"):
+            raise SessionExpiredError(_org_from_args(args))
+    if data is not None:
+        return data
+
+    if _is_session_expired(f"{clean}\n{result.stderr}"):
+        raise SessionExpiredError(_org_from_args(args))
 
     # Only treat non-zero rc as an error if stdout wasn't valid JSON
     if result.returncode not in (0, 1):
@@ -96,29 +144,43 @@ def get_org_limits(target_org: str) -> dict:
     instance_url = result.get("instanceUrl") or result.get("instance_url") or ""
     api_version  = result.get("apiVersion") or result.get("api_version") or "59.0"
 
-    # sf org display redacts the token — use the dedicated command
-    token_info   = _sf("org", "auth", "show-access-token", "--target-org", target_org)
-    token_result = token_info.get("result", {})
-    access_token = token_result.get("accessToken") or token_result.get("access_token")
+    def _fetch() -> dict:
+        # sf org display redacts the token — use the dedicated command
+        token_info   = _sf("org", "auth", "show-access-token", "--target-org", target_org)
+        token_result = token_info.get("result", {})
+        access_token = token_result.get("accessToken") or token_result.get("access_token")
 
-    if not access_token or not instance_url:
-        raise RuntimeError(
-            f"Could not retrieve access token or instance URL. "
-            f"Token result keys: {list(token_result.keys())}"
+        if not access_token or not instance_url:
+            raise RuntimeError(
+                f"Could not retrieve access token or instance URL. "
+                f"Token result keys: {list(token_result.keys())}"
+            )
+
+        req = urllib.request.Request(
+            f"{instance_url}/services/data/v{api_version}/limits",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
         )
-
-    url = f"{instance_url}/services/data/v{api_version}/limits"
-    req = urllib.request.Request(
-        url,
-        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-    )
-    try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            body = resp.read().decode("utf-8")
-            limits = json.loads(body)
-            return limits
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        return _fetch()
     except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Limits API error {e.code}: {e.read().decode()[:200]}")
+        body = e.read().decode(errors="replace")
+        if e.code != 401 and not _is_session_expired(body):
+            raise RuntimeError(f"Limits API error {e.code}: {body[:200]}")
+
+    # 401: the stored access token has expired. Any normal CLI API call makes
+    # sf use the refresh token to get a new one; if that fails it raises
+    # SessionExpiredError, which the API layer reports as "log in again".
+    _sf("data", "query", "--target-org", target_org,
+        "--query", "SELECT Id FROM Organization LIMIT 1")
+    try:
+        return _fetch()
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise SessionExpiredError(target_org)
+        raise RuntimeError(f"Limits API error {e.code}: {e.read().decode(errors='replace')[:200]}")
 
 
 def list_orgs():
