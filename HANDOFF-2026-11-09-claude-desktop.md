@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-09
 **Machine:** Windows 11, project at `C:\Users\juan\dev\app\vendavis`
-**Branch:** `opencode/mvp-0` (HEAD `70748cb`) — **8 commits, none pushed.** Remote: `git@github.com:doppiomacchiatto/vendavis.git`. Working tree is clean.
+**Branch:** `opencode/mvp-0` — **6 commits ahead of `origin/opencode/mvp-0` (last pushed: `874c2a2`), not pushed.** Remote: `git@github.com:doppiomacchiatto/vendavis.git`. Working tree is clean (run `git log --oneline -8` for the current HEAD).
 
 This is a short "pick up here" note. The full reference (architecture, gotchas, build details, Windows design) is in [`HANDOFF-2026-11-09.md`](HANDOFF-2026-11-09.md) — read it before changing anything non-trivial.
 
@@ -51,7 +51,7 @@ Windows support, the release build and the error handling are all done and verif
 6. **Install the MSI** (per-machine, needs admin) — only NSIS was tried.
 7. **Code signing** for the Windows installers (SmartScreen warns on unsigned).
 8. **Polish / cleanup** (from the main handoff): gate `frontend/src/api/client.js` request logging behind a DEBUG flag; collapse the OrgPicker debug log behind "Show details"; delete `backend/claude_client.py`; `npm audit` reports 2 vulnerabilities (1 moderate, 1 high) in `frontend/`.
-9. **Decide on pushing** the 8 local commits (`git push -u origin opencode/mvp-0`) — ask the developer first.
+9. **Decide on pushing** the 6 local commits (`git push -u origin opencode/mvp-0`) — ask the developer first.
 
 ---
 
