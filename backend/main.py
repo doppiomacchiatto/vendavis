@@ -1,7 +1,7 @@
 """
 sf-metadata-exp — FastAPI backend
-Serves all Salesforce, Claude, and Excel operations over localhost REST.
-Launched as a child process by Electron; port is passed via SF_BACKEND_PORT env var
+Serves all Salesforce, AI, and Excel operations over localhost REST.
+Launched as a child process by Tauri; port is passed via SF_BACKEND_PORT env var
 or defaults to 7891.
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ from sf_cli import (list_orgs, list_objects, describe_object, run_apex_anonymous
 from sf_cli import _sf as _sf_raw   # for raw SOQL
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
-from claude_client import ClaudeClient, save_config, _load_config, _load_api_key, _load_base_url, _load_legacy_config
+from ai_client import AIClient, save_config, _load_vendavis_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config
 
 app = FastAPI(title="Vendavis", version="2.0.0")
 
@@ -39,25 +39,22 @@ app.add_middleware(
     allow_credentials=False,
 )
 
-_claude  = ClaudeClient()
+_ai = AIClient()
 
 # ---------------------------------------------------------------------------
 # Settings (API key, model, base URL)
 # ---------------------------------------------------------------------------
 
 AVAILABLE_MODELS = [
-    # Sonnet family
-    {"id": "claude-sonnet-4-6",                      "label": "Sonnet 4.6     — most efficient for everyday tasks"},
-    {"id": "claude-sonnet-4-6-thinking",              "label": "Sonnet 4.6 1M  — 1M context window"},
-    {"id": "claude-sonnet-5-20250929",                "label": "Sonnet 5       — most efficient for everyday tasks"},
-    {"id": "claude-sonnet-5-20250929-thinking",       "label": "Sonnet 5 1M    — 1M context window"},
-    # Opus family
-    {"id": "claude-opus-4-6-v1",                     "label": "Opus 4.6       — most capable for ambitious work"},
-    {"id": "claude-opus-4-6-v1-thinking",             "label": "Opus 4.6 1M   — 1M context window"},
-    {"id": "claude-opus-4-7",                         "label": "Opus 4.7       — most capable for ambitious work"},
-    {"id": "claude-opus-4-7-thinking",                "label": "Opus 4.7 1M   — 1M context window"},
-    {"id": "claude-opus-4-8",                         "label": "Opus 4.8       — most capable for ambitious work"},
-    {"id": "claude-opus-4-8-thinking",                "label": "Opus 4.8 1M   — 1M context window"},
+    # OpenAI
+    {"id": "gpt-4o",                    "label": "GPT-4o          — OpenAI flagship, fast and capable"},
+    {"id": "gpt-4o-mini",               "label": "GPT-4o mini     — OpenAI lightweight, low cost"},
+    {"id": "o3",                        "label": "o3              — OpenAI reasoning model"},
+    # Anthropic (via OpenAI-compat or direct)
+    {"id": "claude-sonnet-4-6",         "label": "Claude Sonnet   — efficient for everyday tasks"},
+    {"id": "claude-opus-4-6-v1",        "label": "Claude Opus     — most capable for ambitious work"},
+    # Meta / open-weight (via gateway)
+    {"id": "meta-llama/llama-3.3-70b-instruct", "label": "Llama 3.3 70B  — open-weight via gateway"},
 ]
 
 class SettingsRequest(BaseModel):
@@ -83,15 +80,15 @@ def get_settings():
         "model":         cfg.get("model", ""),
         "base_url":      effective_url,
         "models":        AVAILABLE_MODELS,
-        "key_source":    "vendavis" if (Path.home() / ".anthropic_key").exists() else
+        "key_source":    "vendavis" if (Path.home() / ".vendavis_api_key").exists() else
                          ("legacy" if legacy.get("api_key") else "none"),
     }
 
 @app.post("/api/settings")
 def post_settings(req: SettingsRequest):
-    # Persist API key to ~/.anthropic_key
+    # Persist API key to ~/.vendavis_api_key
     if req.api_key is not None:
-        key_path = Path.home() / ".anthropic_key"
+        key_path = Path.home() / ".vendavis_api_key"
         if req.api_key.strip():
             key_path.write_text(req.api_key.strip())
         # Blank key = don't overwrite existing
@@ -100,8 +97,8 @@ def post_settings(req: SettingsRequest):
         model=req.model or "",
         base_url=req.base_url if req.base_url is not None else "",
     )
-    # Force the Claude client to rebuild with new settings on next call
-    _claude._client = None
+    # Force the AI client to rebuild with new settings on next call
+    _ai._client = None
     return {"ok": True}
 
 # ---------------------------------------------------------------------------
@@ -407,7 +404,7 @@ def export_principal_fls(req: PrincipalExportRequest):
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
 # ---------------------------------------------------------------------------
-# Claude chat — streaming SSE
+# AI chat — streaming SSE (provider-agnostic via ai_client)
 # ---------------------------------------------------------------------------
 
 class ChatRequest(BaseModel):
@@ -416,16 +413,21 @@ class ChatRequest(BaseModel):
     org_context: Optional[dict] = None
     model:       Optional[str]  = None   # override from settings
 
-@app.post("/api/claude/chat")
-def claude_chat(req: ChatRequest):
+@app.post("/api/ai/chat")
+def ai_chat(req: ChatRequest):
     def _stream():
         try:
-            for chunk in _claude.stream(req.messages, system=req.system, model=req.model or None):
+            for chunk in _ai.stream(req.messages, system=req.system, model=req.model or None):
                 yield f"data: {json.dumps({'delta': chunk})}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
     return StreamingResponse(_stream(), media_type="text/event-stream")
+
+# Keep old path as alias for backwards compatibility during migration
+@app.post("/api/claude/chat")
+def claude_chat_compat(req: ChatRequest):
+    return ai_chat(req)
 
 # ---------------------------------------------------------------------------
 # Open file via OS default app (fallback when Tauri invoke unavailable)

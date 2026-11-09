@@ -1,0 +1,46 @@
+{
+  "_comment": "OpenCode provider configuration for Vendavis. Copy this file and fill in your values. All fields are optional — unset fields fall back to env vars or the Settings modal.",
+
+  "provider": "openai",
+
+  "api_key": "",
+
+  "base_url": "",
+
+  "model": "gpt-4o",
+
+  "providers": {
+    "_comment": "Reference configs for common providers. Copy the block you want into the root fields above.",
+
+    "openai": {
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-4o"
+    },
+    "anthropic_compat": {
+      "base_url": "https://api.anthropic.com/v1",
+      "model": "claude-sonnet-4-6",
+      "_note": "Requires Anthropic API key. Uses their OpenAI-compatible endpoint."
+    },
+    "azure_openai": {
+      "base_url": "https://<your-resource>.openai.azure.com/openai/deployments/<your-deployment>",
+      "model": "gpt-4o",
+      "_note": "Set api_key to your Azure OpenAI key."
+    },
+    "ollama_local": {
+      "base_url": "http://localhost:11434/v1",
+      "api_key": "ollama",
+      "model": "llama3.3",
+      "_note": "Run Ollama locally: https://ollama.com"
+    },
+    "openrouter": {
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "_note": "OpenRouter aggregates many providers: https://openrouter.ai"
+    },
+    "custom_gateway": {
+      "base_url": "https://your-gateway.example.com/v1",
+      "model": "your-model-id",
+      "_note": "Any OpenAI-compatible gateway (LiteLLM, vLLM, etc.)"
+    }
+  }
+}

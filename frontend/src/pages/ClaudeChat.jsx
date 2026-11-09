@@ -1,5 +1,5 @@
 /**
- * Claude AI chat page — full RAG pipeline:
+ * OpenCode AI chat page — full RAG pipeline:
  * fuzzy object matching, field loading, SOQL generation.
  */
 import { useState, useRef, useEffect } from "react";
@@ -365,7 +365,7 @@ export default function ClaudeChat({ org, ctx, setCtx }) {
 
     let full = "";
     await apiStream(
-      "/api/claude/chat",
+      "/api/ai/chat",
       { messages: newMsgs, system: buildSystem() },
       (delta) => {
         full += delta;
@@ -422,7 +422,7 @@ export default function ClaudeChat({ org, ctx, setCtx }) {
 
       let autoFull = "";
       await apiStream(
-        "/api/claude/chat",
+        "/api/ai/chat",
         { messages: nextMsgs, system: buildSystem() },
         (delta) => {
           autoFull += delta;

@@ -17,7 +17,7 @@ const TABS = [
   { id: "soql",     label: "SOQL Runner"         },
   { id: "apex",     label: "Apex Runner"         },
   { id: "health",   label: "🏥 Health"           },
-  { id: "claude",   label: "Claude AI"           },
+  { id: "claude",   label: "OpenCode"             },
 ];
 
 export default function App() {
@@ -488,7 +488,7 @@ export default function App() {
                     <div className="flex flex-col gap-1">
                       <p className="font-semibold text-gray-800 dark:text-white text-sm">Claude API Key <span className="text-yellow-500 text-xs font-bold ml-1">Optional</span></p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                        Required only for the Claude AI tab, SOQL AI assist, and Apex AI assistant. Set via <strong>⚙ Settings</strong> in the toolbar.
+                        Required only for the OpenCode tab, SOQL AI assist, and Apex AI assistant. Configure via <strong>⚙ Settings</strong> in the toolbar or in <code>opencode.config.json</code>.
                       </p>
                     </div>
                   </div>
@@ -504,7 +504,7 @@ export default function App() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm" onClick={() => setSettingsOpen(false)}>
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 flex flex-col gap-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-gray-800 dark:text-white">Claude / AI Settings</h2>
+              <h2 className="text-base font-bold text-gray-800 dark:text-white">AI Settings</h2>
               <button onClick={() => setSettingsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none">✕</button>
             </div>
 
@@ -522,7 +522,7 @@ export default function App() {
                 </span>
                 <input
                   type="password"
-                  placeholder={settingsKeySet ? "••••••••••••••••••••••••" : "sk-ant-…"}
+                  placeholder={settingsKeySet ? "••••••••••••••••••••••••" : "sk-… or your gateway key"}
                   value={settingsDraft.api_key}
                   onChange={(e) => setSettingsDraft((d) => ({ ...d, api_key: e.target.value }))}
                   className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
@@ -534,7 +534,7 @@ export default function App() {
               <label className="flex flex-col gap-1">
                 <span className="font-medium text-gray-700 dark:text-gray-300">
                   Gateway URL
-                  <span className="ml-1 text-xs text-gray-400 font-normal">(leave blank for api.anthropic.com)</span>
+                  <span className="ml-1 text-xs text-gray-400 font-normal">(leave blank for provider default, or set in opencode.config.json)</span>
                 </span>
                 <input
                   type="text"
@@ -553,7 +553,7 @@ export default function App() {
                   onChange={(e) => setSettingsDraft((d) => ({ ...d, model: e.target.value }))}
                   className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 >
-                  <option value="">Default (Claude Sonnet)</option>
+                  <option value="">Default (from opencode.config.json or gpt-4o)</option>
                   {availModels.map((m) => (
                     <option key={m.id} value={m.id}>{m.label}</option>
                   ))}
