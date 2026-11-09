@@ -456,6 +456,72 @@ def open_file(req: OpenFileRequest):
 def health():
     return {"status": "ok", "version": "2.0.0"}
 
+
+@app.post("/api/shutdown")
+def shutdown():
+    """Gracefully shut down the backend. Called by Tauri before app.exit()."""
+    import threading, signal
+    def _stop():
+        import time
+        time.sleep(0.1)  # let the HTTP response send first
+        os.kill(os.getpid(), signal.SIGTERM)
+    threading.Thread(target=_stop, daemon=True).start()
+    return {"status": "shutting down"}
+
+
+@app.get("/api/debug-env")
+def debug_env():
+    """Diagnostic endpoint — returns PATH, sf/node locations, and whether each is found."""
+    from platform_env import get_platform
+    import shutil
+    plat = get_platform()
+    augmented = plat.augmented_path()
+    sf_found   = shutil.which("sf",   path=augmented) or shutil.which("sfdx", path=augmented)
+    node_found = shutil.which("node", path=augmented)
+    npm_found  = shutil.which("npm",  path=augmented)
+    candidates = plat.sf_cli_candidates()
+    candidate_exists = {c: os.path.exists(c) for c in candidates}
+    # For MacOS provider, expose the resolved node/npm dirs
+    node_dir    = getattr(plat, "_node_bin_dir",    lambda: None)()
+    npm_bin_dir = getattr(plat, "_npm_global_bin",  lambda: None)()
+    return {
+        "platform": plat.__class__.__name__,
+        "process_path": os.environ.get("PATH", ""),
+        "augmented_path_dirs": augmented.split(os.pathsep),
+        "sf_found":   sf_found,
+        "node_found": node_found,
+        "npm_found":  npm_found,
+        "node_bin_dir_probe":   node_dir,
+        "npm_global_bin_probe": npm_bin_dir,
+        "sf_candidates": candidate_exists,
+    }
+
+
+@app.get("/api/sf-version")
+def sf_version():
+    """Check that the Salesforce CLI is available and return its version."""
+    from sf_cli import _find_sf_cli, _augmented_path
+    import subprocess, re as _re
+    try:
+        sf_bin = _find_sf_cli()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    env = {**os.environ, "PATH": _augmented_path()}
+    try:
+        result = subprocess.run(
+            [sf_bin, "version", "--json"],
+            capture_output=True, text=True, timeout=15, env=env
+        )
+        clean = _re.sub(r'\x1b\[[0-9;]*m', '', result.stdout).strip()
+        try:
+            data = json.loads(clean)
+            version_str = data.get("result", {}).get("cliVersion") or data.get("cliVersion") or clean
+        except Exception:
+            version_str = clean or result.stderr.strip() or "unknown"
+        return {"sf_bin": sf_bin, "version": version_str}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=503, detail="sf version check timed out")
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------

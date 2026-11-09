@@ -10,29 +10,24 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from platform_env import get_platform
+
 SF_CLI = None   # resolved lazily on first call
 
 
+def _augmented_path() -> str:
+    """Return an augmented PATH string for the current OS via platform_env."""
+    return get_platform().augmented_path()
+
+
 def _find_sf_cli():
-    """Locate the sf (or sfdx) binary, checking common install paths."""
-    import shutil
-    # 1. Already on PATH
-    for name in ("sf", "sfdx"):
-        if shutil.which(name):
-            return shutil.which(name)
-    # 2. Common npm global locations on macOS
-    home = Path.home()
-    candidates = [
-        home / ".npm-global" / "bin" / "sf",
-        home / ".npm-global" / "bin" / "sfdx",
-        Path("/usr/local/bin/sf"),
-        Path("/usr/local/bin/sfdx"),
-        Path("/opt/homebrew/bin/sf"),
-        Path("/opt/homebrew/bin/sfdx"),
-    ]
-    for p in candidates:
-        if p.exists():
-            return str(p)
+    """
+    Locate the sf (or sfdx) binary using the OS-specific PlatformProvider.
+    Raises FileNotFoundError if neither can be found.
+    """
+    result = get_platform().find_tool("sf", "sfdx")
+    if result:
+        return result
     raise FileNotFoundError(
         "Could not find 'sf' or 'sfdx'. "
         "Install from https://developer.salesforce.com/tools/salesforcecli "
@@ -47,7 +42,7 @@ def _sf(*args, timeout=120):
         SF_CLI = _find_sf_cli()
 
     cmd = [SF_CLI, *args, "--json"]
-    env = {**os.environ}
+    env = {**os.environ, "PATH": _augmented_path()}
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
 
     import re as _re

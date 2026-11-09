@@ -3,11 +3,12 @@ import { api } from "../api/client";
 import Spinner from "./Spinner";
 
 export default function OrgPickerModal({ onSelect }) {
-  const [orgs,    setOrgs]    = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState("");
-  const [chosen,  setChosen]  = useState("");
-  const [log,     setLog]     = useState([]);
+  const [orgs,          setOrgs]          = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState("");
+  const [chosen,        setChosen]        = useState("");
+  const [log,           setLog]           = useState([]);
+  const [startupStatus, setStartupStatus] = useState("starting"); // "starting" | "ready" | null
 
   function addLog(msg) {
     setLog((l) => [...l, `${new Date().toISOString().slice(11,23)} ${msg}`]);
@@ -15,22 +16,57 @@ export default function OrgPickerModal({ onSelect }) {
 
   useEffect(() => {
     async function init() {
-      // 1. Health check first
-      addLog("Checking backend health…");
-      try {
-        await api("/api/health");
-        addLog("✅ Backend is running");
-      } catch (e) {
+      // 1. Health check — retry up to 10s to allow bundled backend to start
+      addLog("Starting data services…");
+      setStartupStatus("starting");
+      const MAX_ATTEMPTS = 20;
+      const DELAY_MS = 500;
+      let healthy = false;
+      for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        try {
+          await api("/api/health");
+          healthy = true;
+          break;
+        } catch {
+          if (i === 0) addLog("Waiting for data services to start…");
+          await new Promise(r => setTimeout(r, DELAY_MS));
+        }
+      }
+      if (!healthy) {
         const msg =
           "Cannot reach the backend server.\n" +
           "Start it with: npm run dev:backend";
         addLog("❌ " + msg);
         setError(msg);
+        setStartupStatus(null);
         setLoading(false);
         return;
       }
+      addLog("✅ Data services ready");
+      setStartupStatus("ready");
+      // Brief pause so user sees "ready" before it disappears
+      await new Promise(r => setTimeout(r, 600));
+      setStartupStatus(null);
 
-      // 2. Load orgs
+      // 2. Check SF CLI is available
+      addLog("Checking Salesforce CLI…");
+      try {
+        const sfInfo = await api("/api/sf-version");
+        addLog(`✅ Salesforce CLI found (${sfInfo.version || sfInfo.sf_bin})`);
+      } catch (e) {
+        const msg = String(e);
+        // Backend returns HTTP 503 when sf/sfdx binary is not found
+        if (msg.includes("503") || msg.includes("Could not find") || msg.includes("sfdx")) {
+          addLog("❌ Salesforce CLI not found");
+          setError("__sf_missing__");
+          setLoading(false);
+          return;
+        }
+        // Non-CLI error (network, timeout, etc.) — log and continue
+        addLog(`⚠️ SF CLI check skipped: ${msg}`);
+      }
+
+      // 3. Load orgs
       addLog("Fetching orgs…");
       try {
         const d = await api("/api/orgs");
@@ -56,17 +92,56 @@ export default function OrgPickerModal({ onSelect }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-[420px] p-8 flex flex-col gap-6">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-[420px] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex flex-col gap-1">
-          <span className="text-2xl">⚡</span>
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Vendavis</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Select a Salesforce org to get started</p>
+        <div className="bg-[#1a2d5a] px-6 py-4 flex items-center gap-3">
+          <img src="/icon-32.png" alt="Vendavis" className="w-7 h-7 object-contain shrink-0" />
+          <div>
+            <h1 className="text-base font-bold text-white leading-tight">Vendavis</h1>
+            <p className="text-xs text-blue-200">Select a Salesforce org to get started</p>
+          </div>
         </div>
+        <div className="p-6 flex flex-col gap-5">
+
+        {/* Startup status banner */}
+        {startupStatus === "starting" && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800">
+            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Starting data services…</p>
+              <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5">This takes a moment on first launch</p>
+            </div>
+          </div>
+        )}
+        {startupStatus === "ready" && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800">
+            <span className="text-green-500 text-lg shrink-0">✓</span>
+            <p className="text-sm font-medium text-green-700 dark:text-green-300">Data services ready</p>
+          </div>
+        )}
 
         {/* Org list */}
         {loading ? (
           <div className="flex justify-center py-4"><Spinner label="Loading orgs…" /></div>
+        ) : error === "__sf_missing__" ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+              <span className="text-xl shrink-0">⚠️</span>
+              <div>
+                <p className="text-sm font-semibold text-red-700 dark:text-red-400">Salesforce CLI not found</p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1 leading-relaxed">
+                  The <code className="font-mono bg-red-100 dark:bg-red-900/40 px-1 rounded">sf</code> CLI is required and must be installed on your PATH before launching Vendavis.
+                </p>
+                <p className="text-xs text-red-500 dark:text-red-500 mt-2">
+                  See <strong>Help → Pre-Requisites</strong> for install instructions.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Quick fix:</p>
+              <code className="text-xs bg-gray-900 text-green-400 px-3 py-2 rounded font-mono">npm install -g @salesforce/cli</code>
+            </div>
+          </div>
         ) : error ? (
           <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg px-4 py-3 whitespace-pre-wrap">
             {error}
@@ -119,6 +194,7 @@ export default function OrgPickerModal({ onSelect }) {
             ))}
           </div>
         )}
+        </div>{/* end inner p-6 */}
       </div>
     </div>
   );

@@ -6,23 +6,87 @@ Cross-platform desktop app (macOS · Windows · Linux).
 
 ```
 sf-metadata-exp-electron/
-├── backend/          # Python FastAPI server (localhost REST)
-│   ├── main.py       # FastAPI app, all routes
-│   ├── sf_cli.py     # Salesforce CLI wrappers
+├── backend/              # Python FastAPI server (localhost REST)
+│   ├── main.py           # FastAPI app, all routes
+│   ├── sf_cli.py         # Salesforce CLI wrappers (delegates to platform_env)
+│   ├── platform_env.py   # OS-specific PATH & tool-discovery abstraction
 │   ├── excel_builder.py
 │   ├── query_history.py
 │   └── claude_client.py
-├── electron/
-│   ├── main.js       # Electron main process — spawns backend, creates window
-│   └── preload.js    # Context bridge (IPC → renderer)
-├── frontend/         # React + Vite + Tailwind
+├── src-tauri/
+│   ├── src/main.rs       # Tauri shell — spawns backend binary, creates window
+│   └── tauri.conf.json
+├── frontend/             # React + Vite + Tailwind
 │   └── src/
 │       ├── App.jsx
-│       ├── api/client.js      # fetch wrapper with port injection
-│       ├── components/        # OrgSelector, TabBar, Spinner
-│       └── pages/             # FlsExplorer, SoqlRunner, ApexRunner, ClaudeChat
-└── sf_fls_exporter.py  # Original Tkinter app (preserved)
+│       ├── api/client.js        # fetch wrapper with port injection
+│       ├── components/          # OrgPickerModal, TabBar, Spinner, …
+│       └── pages/               # FlsExplorer, SoqlRunner, ApexRunner, OrgHealth, ClaudeChat
+└── sf_fls_exporter.py    # Original Tkinter app (preserved for reference)
 ```
+
+---
+
+## Platform Environment (`backend/platform_env.py`)
+
+### The problem
+
+When Vendavis runs as a packaged `.app` / `.exe` / AppImage, the OS launches it with a minimal `PATH` — only the handful of directories the system considers safe defaults. This omits Homebrew (`/opt/homebrew/bin`), nvm, Volta, npm-global, and all other user-installed tool locations. The Salesforce CLI (`sf`) is a Node.js script, so even if the binary is found, calling it fails immediately if `node` is not on the `PATH`.
+
+A naive fix — hardcoding macOS paths in `sf_cli.py` — would break on Windows and Linux and would require touching multiple files every time a new OS is supported.
+
+### Design: abstract provider pattern
+
+`platform_env.py` introduces a small hierarchy modelled on the Strategy / Template Method pattern:
+
+```
+PlatformProvider  (abstract base class)
+├── MacOSProvider   — Homebrew, nvm, Volta, n, npm-global, Yarn
+├── WindowsProvider — %APPDATA%\npm, nvm-windows, Volta, Chocolatey, Scoop
+└── LinuxProvider   — npm-global, nvm, Volta, n, Snap
+```
+
+`PlatformProvider` defines the interface every OS must implement:
+
+| Method | Purpose |
+|---|---|
+| `extra_paths() → List[str]` | **Abstract.** Returns ordered directories to prepend to `PATH`. Each OS knows its own install conventions. |
+| `sf_cli_candidates() → List[str]` | **Override.** Absolute paths to check for `sf`/`sfdx` as a last resort when `shutil.which` finds nothing. |
+| `augmented_path() → str` | **Concrete.** Merges `extra_paths()` with the current process `PATH`, deduplicating entries. Used as `env["PATH"]` for every subprocess call. |
+| `find_tool(*names) → Optional[str]` | **Concrete.** Calls `shutil.which` over the augmented path, then falls back to iterating `sf_cli_candidates()`. |
+
+A module-level factory, `get_platform()`, returns the singleton provider for the running OS using `sys.platform`:
+
+```python
+from platform_env import get_platform
+
+plat = get_platform()           # MacOSProvider / WindowsProvider / LinuxProvider
+sf   = plat.find_tool("sf", "sfdx")
+env  = {"PATH": plat.augmented_path(), **os.environ}
+```
+
+`sf_cli.py` imports `get_platform()` and delegates entirely — no platform `if` branches in the CLI wrapper itself.
+
+### Adding a new OS or a new OS-specific function
+
+To support a new platform (e.g. FreeBSD), subclass `PlatformProvider`, implement `extra_paths()`, add it to the `get_platform()` factory, and nothing else changes.
+
+To add a new OS-specific capability — for example `default_config_dir()` (macOS → `~/Library/Application Support`, Windows → `%APPDATA%`, Linux → `~/.config`) — add an abstract method to `PlatformProvider` and implement it in each subclass. All call sites use `get_platform().default_config_dir()` without any platform checks.
+
+### Windows paths (`WindowsProvider`)
+
+The Windows subclass is already implemented and ready for the Windows build phase. It covers:
+
+- `%APPDATA%\npm` — npm global installs (the Windows default)
+- `%LOCALAPPDATA%\nvm` — nvm-windows
+- `%LOCALAPPDATA%\Volta\bin` — Volta
+- `C:\ProgramData\chocolatey\bin` — Chocolatey
+- `%USERPROFILE%\scoop\shims` — Scoop
+- `C:\Program Files\nodejs` — Node.js installer default
+
+The `sf_cli_candidates()` list also includes `.cmd` wrapper variants, which Windows npm installs generate alongside the bare binary name.
+
+---
 
 ## Dev setup (first time)
 
@@ -37,7 +101,7 @@ pip install -r requirements.txt
 cd ../frontend
 npm install
 
-# 3. Root (Electron + concurrently)
+# 3. Root (Tauri + concurrently)
 cd ..
 npm install
 ```
@@ -46,7 +110,7 @@ npm install
 
 ```bash
 npm run dev
-# Starts: Vite dev server (port 5173) + FastAPI backend (port auto) + Electron
+# Starts: Vite dev server (port 5173) + FastAPI backend (port 7891) + Tauri window
 ```
 
 ## Build for distribution
@@ -55,14 +119,14 @@ npm run dev
 # Build frontend
 npm run build:frontend
 
-# Bundle Python backend (run once per platform)
+# Bundle Python backend with PyInstaller (run once per platform)
 npm run build:backend
 
-# Package Electron app
-npm run dist
-# → dist/SF Metadata Explorer-2.0.0.dmg (macOS)
-# → dist/SF Metadata Explorer Setup 2.0.0.exe (Windows)
-# → dist/SF Metadata Explorer-2.0.0.AppImage (Linux)
+# Package via Tauri
+npx tauri build
+# → src-tauri/target/release/bundle/dmg/Vendavis_*.dmg  (macOS)
+# → src-tauri/target/release/bundle/msi/Vendavis_*.msi  (Windows)
+# → src-tauri/target/release/bundle/appimage/Vendavis_*.AppImage (Linux)
 ```
 
 ## Environment variables
@@ -99,3 +163,24 @@ A secondary variant is **AI conversation export** — saving the Claude AI chat 
 ### Multi-Profile Batch Export
 
 Currently the Profiles & PermSets tab exports one profile at a time. A natural next step is to allow the user to select multiple profiles in the left sidebar (checkboxes, same pattern as objects), then kick off a sequential batch export — one workbook per profile — with the overlay showing "Exporting profile 2 of 3…". Each workbook lands in the output directory named after the profile. The in-process FLS cache makes this fast: Query 1 only runs once per profile, so a 3-profile batch with 5 objects each would complete in roughly the same time as 3 individual exports back to back. The "Exported Workbooks" history panel in the sidebar already supports listing multiple workbooks, so the UI is ready — only the export trigger and the loop need to be added.
+
+### Inline Record Editing in SOQL Runner
+
+The SOQL results grid currently displays query output as a read-only table. A natural evolution is to make individual cells **editable in-place** with a "Commit Changes" button that activates only when at least one cell has been dirtied.
+
+**UX flow.**
+- Clicking a cell puts it into edit mode (a borderless `<input>` or `<textarea>` in-place, matching the cell width).
+- Edited cells are highlighted (e.g. light yellow/amber background) so the user can see exactly what has changed before committing.
+- A **Commit Changes** button lives in the results toolbar. It renders greyed-out (`disabled`, `opacity-50`) until at least one cell is dirty; once a change is made it activates with a blue/green highlight.
+- An optional **Discard** button resets all dirty cells back to their original values without making any API calls.
+
+**Under the hood.**
+- The component maintains a `dirtyMap` — a `Map<rowIndex_fieldName, newValue>` — updated on every `onChange`. `isDirty = dirtyMap.size > 0` drives the Commit button's disabled state.
+- On Commit, the frontend groups dirty cells by record `Id`, then calls a new backend endpoint `PATCH /api/orgs/{alias}/records` with a payload like `[{ sobject, id, fields: { Field__c: "new value" } }]`.
+- The backend translates each entry into an `sf data update record` CLI call (or a Composite REST API bulk patch for efficiency on large change sets). Each operation returns success/failure per record; partial failures are surfaced inline on the affected rows without blocking successful ones.
+- After a successful commit the `dirtyMap` is cleared, the result rows are updated with the new values, and a green toast confirms how many records were updated.
+
+**Salesforce constraints to surface in the UI.**
+- Not all fields are editable (formula fields, system fields like `CreatedDate`, fields the running user lacks FLS write access to). The app should detect non-updateable fields from the `describe` response and render those cells as permanently read-only even in edit mode.
+- The `Id` field is never editable and should be visually distinguished (e.g. monospace, locked icon).
+- Bulk updates via the Composite API count against Daily API Requests — the footer limit counter should reflect the calls made on Commit.

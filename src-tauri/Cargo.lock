@@ -3159,6 +3159,7 @@ dependencies = [
 name = "sf-metadata-explorer"
 version = "2.0.0"
 dependencies = [
+ "libc",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

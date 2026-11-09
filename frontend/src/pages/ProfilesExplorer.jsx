@@ -5,7 +5,7 @@ import LoadingOverlay from "../components/LoadingOverlay";
 
 const FIELD_PAGE_SIZE = 30;
 
-export default function ProfilesExplorer({ org }) {
+export default function ProfilesExplorer({ org, ctx, setCtx, loadObjects: loadObjectsShared, onApiCall }) {
   // ── Principal state ────────────────────────────────────────────────────────
   const [profiles,       setProfiles]       = useState([]);
   const [permsets,       setPermsets]       = useState([]);
@@ -17,13 +17,13 @@ export default function ProfilesExplorer({ org }) {
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [permsetsLoaded, setPermsetsLoaded] = useState(false);
 
-  // ── Object + FLS state ─────────────────────────────────────────────────────
-  const [objects,      setObjects]      = useState([]);
+  // ── Object + FLS state — objects come from shared ctx ─────────────────────
+  const objects     = ctx?.objects || [];
+  const objsLoaded  = ctx?.objectsLoaded || false;
+  const loadingObjs = ctx?.objectsLoading || false;
   const [objFilter,    setObjFilter]    = useState("");
   const [selectedObj,  setSelectedObj]  = useState(null);
   const [checkedObjs,  setCheckedObjs]  = useState(new Set()); // multi-select for export
-  const [objsLoaded,   setObjsLoaded]   = useState(false);
-  const [loadingObjs,  setLoadingObjs]  = useState(false);
   const [flsData,      setFlsData]      = useState(null);  // {obj_perms, fls: {field: {readable, editable}}}
   const [loadingFls,   setLoadingFls]   = useState(false);
   const [fieldPage,    setFieldPage]    = useState(0);
@@ -75,18 +75,11 @@ export default function ProfilesExplorer({ org }) {
     finally     { setLoadingPS(false); }
   }
 
-  async function loadObjects() {
+  // ── Load Objects — delegates to shared App.jsx loader ──────────────────────
+  function loadObjects() {
     if (!org) return;
-    setLoadingObjs(true);
-    setObjects([]); setSelectedObj(null); setFlsData(null); setCheckedObjs(new Set());
     log(`Loading objects…`);
-    try {
-      const d = await api(`/api/orgs/${org.alias}/objects`);
-      setObjects(d.objects || []);
-      setObjsLoaded(true);
-      log(`${(d.objects || []).length} objects loaded`, "success");
-    } catch (e) { log(e.message, "error"); }
-    finally     { setLoadingObjs(false); }
+    loadObjectsShared?.();
   }
 
   function toggleCheck(apiName) {

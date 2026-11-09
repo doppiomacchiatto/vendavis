@@ -3,18 +3,20 @@ import { api } from "../api/client";
 import Spinner from "../components/Spinner";
 import LoadingOverlay from "../components/LoadingOverlay";
 
-export default function FlsExplorer({ org, ctx, setCtx }) {
-  const [objects,     setObjects]     = useState([]);
+export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjectsShared, onApiCall }) {
+  // Objects come from shared ctx — no local copy needed
+  const objects    = ctx?.objects || [];
+  const objLoaded  = ctx?.objectsLoaded || false;
+  const loadingObj = ctx?.objectsLoading || false;
+
   const [filter,      setFilter]      = useState("");
   const [selectedObj, setSelectedObj] = useState(null);
   const [exportSel,   setExportSel]   = useState([]);
   const [fields,      setFields]      = useState([]);
-  const [loadingObj,  setLoadingObj]  = useState(false);
   const [loadingFld,  setLoadingFld]  = useState(false);
   const [exporting,   setExporting]   = useState(false);
   const [exportedFiles, setExportedFiles] = useState([]);
   const cancelRef = useRef(false);
-  const [objLoaded,   setObjLoaded]   = useState(false);
   const [debugOpen,   setDebugOpen]   = useState(false);
   const [debugLog,    setDebugLog]    = useState([]);
   const [fieldPage,   setFieldPage]   = useState(0);
@@ -28,24 +30,11 @@ export default function FlsExplorer({ org, ctx, setCtx }) {
     if (type === "error") setDebugOpen(true);
   }
 
-  // ── Load Objects ────────────────────────────────────────────────────────────
-  async function loadObjects() {
+  // ── Load Objects — delegates to shared App.jsx loader ──────────────────────
+  function loadObjects() {
     if (!org) { log("No org selected", "error"); return; }
-    setLoadingObj(true);
-    setObjects([]); setFields([]); setSelectedObj(null); setExportSel([]); setExportedFiles([]);
     log(`Loading objects from ${org.alias}…`);
-    try {
-      const d = await api(`/api/orgs/${org.alias}/objects`);
-      const objs = d.objects || [];
-      setObjects(objs);
-      setObjLoaded(true);
-      setCtx((c) => ({ ...c, objects: objs }));
-      log(`${objs.length} objects loaded`, "success");
-    } catch (e) {
-      log(e.message, "error");
-    } finally {
-      setLoadingObj(false);
-    }
+    loadObjectsShared?.();
   }
 
   // ── Load Fields ─────────────────────────────────────────────────────────────
