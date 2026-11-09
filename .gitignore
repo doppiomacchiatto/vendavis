@@ -5,7 +5,6 @@ __pycache__/
 backend/.venv/
 backend/dist/
 backend/build/
-backend/*.spec
 
 # Node
 node_modules/

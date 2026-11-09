@@ -182,6 +182,42 @@ impl PlatformOps for WindowsPlatform {
     }
 }
 
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+    use std::process::Stdio;
+    use std::time::Duration;
+
+    fn running(name: &str) -> bool {
+        let out = Command::new("tasklist")
+            .args(["/FI", &format!("IMAGENAME eq {name}"), "/NH"])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).contains(name)
+    }
+
+    /// cmd.exe spawns ping.exe as a grandchild; killing the tree must take
+    /// both down, which `child.kill()` alone would not.
+    #[test]
+    fn kill_process_tree_kills_grandchildren() {
+        let plat = WindowsPlatform;
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "ping -n 60 127.0.0.1 >NUL"])
+            .stdout(Stdio::null());
+        plat.apply_spawn_flags(&mut cmd);
+        let mut child = cmd.spawn().unwrap();
+        plat.on_spawned(&child);
+
+        std::thread::sleep(Duration::from_millis(1500));
+        assert!(running("PING.EXE"), "grandchild should be running");
+
+        plat.kill_process_tree(&mut child).unwrap();
+        let _ = child.wait();
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(!running("PING.EXE"), "grandchild survived kill_process_tree");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
