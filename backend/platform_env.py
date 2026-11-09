@@ -260,11 +260,47 @@ class WindowsProvider(PlatformProvider):
     Volta locations.
     """
 
+    @staticmethod
+    def _npm_global_prefix() -> Optional[str]:
+        """
+        Ask npm for its global prefix. On Windows, global binaries (sf.cmd)
+        live directly in the prefix dir, not in prefix/bin. This follows any
+        node version manager (nvm-windows, Volta, fnm) that moves the prefix.
+        """
+        import subprocess as _sp
+        bootstrap = os.pathsep.join([
+            r"C:\Program Files\nodejs",
+            r"C:\Program Files (x86)\nodejs",
+            os.environ.get("PATH", ""),
+        ])
+        npm = shutil.which("npm.cmd", path=bootstrap) or shutil.which("npm", path=bootstrap)
+        if not npm:
+            return None
+        try:
+            result = _sp.run(
+                [npm, "prefix", "-g"],
+                capture_output=True, text=True, timeout=5,
+                creationflags=getattr(_sp, "CREATE_NO_WINDOW", 0),
+            )
+            prefix = result.stdout.strip()
+            if prefix and Path(prefix).is_dir():
+                return prefix
+        except Exception:
+            pass
+        return None
+
     def extra_paths(self) -> List[str]:
         home = Path.home()
         appdata  = Path(os.environ.get("APPDATA",  str(home / "AppData" / "Roaming")))
         localapp = Path(os.environ.get("LOCALAPPDATA", str(home / "AppData" / "Local")))
+        npm_prefix = self._npm_global_prefix()
         paths = [
+            # npm's actual global dir first (node.exe sits next to npm.cmd
+            # in the Node installer layout, so sf.cmd can find node)
+            *(p for p in [npm_prefix] if p),
+            # Salesforce CLI official Windows installer
+            r"C:\Program Files\sf\bin",
+            str(localapp / "sf" / "bin"),
             # Node.js installer default
             r"C:\Program Files\nodejs",
             r"C:\Program Files (x86)\nodejs",
@@ -285,7 +321,16 @@ class WindowsProvider(PlatformProvider):
         home = Path.home()
         appdata  = Path(os.environ.get("APPDATA",  str(home / "AppData" / "Roaming")))
         localapp = Path(os.environ.get("LOCALAPPDATA", str(home / "AppData" / "Local")))
-        return [
+        npm_prefix = self._npm_global_prefix()
+        dynamic = []
+        if npm_prefix:
+            dynamic = [
+                str(Path(npm_prefix) / "sf.cmd"),
+                str(Path(npm_prefix) / "sfdx.cmd"),
+            ]
+        return dynamic + [
+            r"C:\Program Files\sf\bin\sf.cmd",
+            str(localapp / "sf" / "bin" / "sf.cmd"),
             str(appdata / "npm" / "sf.cmd"),
             str(appdata / "npm" / "sf"),
             str(appdata / "npm" / "sfdx.cmd"),

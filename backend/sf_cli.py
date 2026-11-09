@@ -14,6 +14,16 @@ from platform_env import get_platform
 
 SF_CLI = None   # resolved lazily on first call
 
+# Windows: don't flash a console window per sf call; always decode as UTF-8
+# (text=True alone uses the ANSI code page there). Harmless on other OSes.
+SUBPROCESS_KWARGS = {
+    "capture_output": True,
+    "text": True,
+    "encoding": "utf-8",
+    "errors": "replace",
+    "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
+}
+
 
 def _augmented_path() -> str:
     """Return an augmented PATH string for the current OS via platform_env."""
@@ -43,7 +53,7 @@ def _sf(*args, timeout=120):
 
     cmd = [SF_CLI, *args, "--json"]
     env = {**os.environ, "PATH": _augmented_path()}
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+    result = subprocess.run(cmd, timeout=timeout, env=env, **SUBPROCESS_KWARGS)
 
     import re as _re
     # Strip ANSI color codes before parsing

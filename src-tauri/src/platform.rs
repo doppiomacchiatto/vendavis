@@ -24,6 +24,10 @@ pub trait PlatformOps: Send + Sync {
     /// Called in `start_backend` just before `.spawn()`.
     fn apply_spawn_flags(&self, cmd: &mut Command);
 
+    /// Called right after a successful `.spawn()`. Default is a no-op;
+    /// Windows uses it to assign the child to its Job Object.
+    fn on_spawned(&self, _child: &Child) {}
+
     /// Kill `child` and every process it has spawned.
     /// On Unix this kills the whole process group; on Windows it uses
     /// `TerminateJobObject` so child processes cannot outlive the job.
@@ -90,16 +94,90 @@ impl PlatformOps for UnixPlatform {
 pub struct WindowsPlatform;
 
 #[cfg(windows)]
+mod job {
+    use std::io;
+    use std::sync::OnceLock;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+
+    pub struct Job(pub HANDLE);
+
+    // SAFETY: a Job Object handle is just a kernel handle; the Win32 job APIs
+    // are safe to call from any thread.
+    unsafe impl Send for Job {}
+    unsafe impl Sync for Job {}
+
+    static JOB: OnceLock<Option<Job>> = OnceLock::new();
+
+    /// Process-wide job with KILL_ON_JOB_CLOSE. The handle is never closed
+    /// explicitly: when Vendavis exits for any reason the OS closes it and
+    /// kills every process still in the job.
+    pub fn get() -> io::Result<&'static Job> {
+        JOB.get_or_init(create)
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "failed to create Job Object"))
+    }
+
+    fn create() -> Option<Job> {
+        unsafe {
+            let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if handle.is_null() {
+                return None;
+            }
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let ok = SetInformationJobObject(
+                handle,
+                JobObjectExtendedLimitInformation,
+                &info as *const _ as *const _,
+                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            );
+            if ok == 0 {
+                CloseHandle(handle);
+                return None;
+            }
+            Some(Job(handle))
+        }
+    }
+}
+
+#[cfg(windows)]
 impl PlatformOps for WindowsPlatform {
-    fn apply_spawn_flags(&self, _cmd: &mut Command) {
-        // TODO (Windows build): assign backend to a Job Object with
-        // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE so all workers die when
-        // Vendavis exits, even if confirm_close is never called.
+    fn apply_spawn_flags(&self, cmd: &mut Command) {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    fn on_spawned(&self, child: &Child) {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+        match job::get() {
+            Ok(job) => {
+                // SAFETY: both handles are valid for the duration of the call.
+                let ok = unsafe { AssignProcessToJobObject(job.0, child.as_raw_handle() as _) };
+                if ok == 0 {
+                    eprintln!(
+                        "[backend] AssignProcessToJobObject failed: {}",
+                        std::io::Error::last_os_error()
+                    );
+                }
+            }
+            Err(e) => eprintln!("[backend] {e}"),
+        }
     }
 
     fn kill_process_tree(&self, child: &mut Child) -> std::io::Result<()> {
-        // TODO (Windows build): call TerminateJobObject for the job handle
-        // associated with this child so all worker processes die atomically.
+        use windows_sys::Win32::System::JobObjects::TerminateJobObject;
+        if let Ok(job) = job::get() {
+            // SAFETY: job.0 is a valid job handle.
+            if unsafe { TerminateJobObject(job.0, 1) } != 0 {
+                return Ok(());
+            }
+        }
         child.kill()
     }
 }

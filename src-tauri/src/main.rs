@@ -9,6 +9,16 @@ use tauri::{Emitter, Manager, State};
 #[cfg(target_os = "macos")]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 
+#[cfg(windows)]
+const BACKEND_BIN: &str = "sf_backend.exe";
+#[cfg(not(windows))]
+const BACKEND_BIN: &str = "sf_backend";
+
+#[cfg(windows)]
+const VENV_PYTHON: &str = "Scripts\\python.exe";
+#[cfg(not(windows))]
+const VENV_PYTHON: &str = "bin/python";
+
 struct BackendProcess(Mutex<Option<Child>>);
 struct BackendPort(u16);
 
@@ -39,28 +49,32 @@ fn project_root() -> std::path::PathBuf {
 fn start_backend(port: u16, app_handle: Option<&tauri::AppHandle>) -> Option<Child> {
     // 1. Try bundled binary (production) via Tauri resource resolver
     let bundled = app_handle.and_then(|h| {
-        h.path().resource_dir().ok().map(|d| d.join("sf_backend"))
+        h.path().resource_dir().ok().map(|d| d.join(BACKEND_BIN))
     });
 
     // 2. Fall back to dev: venv python running main.py
     let root = project_root();
-    let venv_python = root.join("backend").join(".venv").join("bin").join("python");
+    let venv_python = root.join("backend").join(".venv").join(VENV_PYTHON);
 
     let plat = platform::get_platform();
 
-    if let Some(bin) = bundled.filter(|p| p.exists()) {
+    if let Some(bin) = bundled.filter(|p| p.is_file()) {
         eprintln!("[backend] starting bundled binary: {}", bin.display());
         let mut cmd = Command::new(&bin);
         cmd.env("SF_BACKEND_PORT", port.to_string());
         plat.apply_spawn_flags(&mut cmd);
-        cmd.spawn().ok()
+        let child = cmd.spawn().ok();
+        if let Some(c) = &child { plat.on_spawned(c); }
+        child
     } else if venv_python.exists() {
         let script = root.join("backend").join("main.py");
         eprintln!("[backend] starting dev server: {} {}", venv_python.display(), script.display());
         let mut cmd = Command::new(&venv_python);
         cmd.arg(&script).env("SF_BACKEND_PORT", port.to_string());
         plat.apply_spawn_flags(&mut cmd);
-        cmd.spawn().ok()
+        let child = cmd.spawn().ok();
+        if let Some(c) = &child { plat.on_spawned(c); }
+        child
     } else {
         eprintln!("[backend] ERROR: could not find sf_backend binary or venv python");
         None
@@ -228,6 +242,7 @@ fn main() {
         find_free_port()
     };
 
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut builder = tauri::Builder::default()
         .manage(BackendPort(port))
         .manage(BackendProcess(Mutex::new(None)))

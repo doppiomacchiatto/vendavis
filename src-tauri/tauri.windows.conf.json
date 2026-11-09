@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "resources": {
+      "../backend/dist/sf_backend": null,
+      "../backend/dist/sf_backend.exe": "sf_backend.exe"
+    }
+  }
+}

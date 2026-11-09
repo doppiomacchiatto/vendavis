@@ -5,11 +5,11 @@
   "scripts": {
     "dev":            "concurrently \"npm run dev:backend\" \"npm run tauri:dev\"",
     "dev:frontend":   "cd frontend && npm run dev",
-    "dev:backend":    "cd backend && .venv/bin/uvicorn main:app --host 0.0.0.0 --port 7891 --reload",
+    "dev:backend":    "node scripts/venv-run.mjs uvicorn main:app --host 0.0.0.0 --port 7891 --reload",
     "tauri:dev":      "tauri dev",
     "tauri:build":    "npm run build:backend && tauri build",
     "build:frontend": "cd frontend && npm run build",
-    "build:backend":  "cd backend && .venv/bin/pyinstaller sf_backend.spec --distpath dist --clean",
+    "build:backend":  "node scripts/venv-run.mjs pyinstaller sf_backend.spec --distpath dist --clean",
     "postinstall":    "cd frontend && npm install"
   },
   "devDependencies": {

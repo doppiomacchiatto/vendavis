@@ -502,7 +502,7 @@ def debug_env():
 @app.get("/api/sf-version")
 def sf_version():
     """Check that the Salesforce CLI is available and return its version."""
-    from sf_cli import _find_sf_cli, _augmented_path
+    from sf_cli import _find_sf_cli, _augmented_path, SUBPROCESS_KWARGS
     import subprocess, re as _re
     try:
         sf_bin = _find_sf_cli()
@@ -512,7 +512,7 @@ def sf_version():
     try:
         result = subprocess.run(
             [sf_bin, "version", "--json"],
-            capture_output=True, text=True, timeout=15, env=env
+            timeout=15, env=env, **SUBPROCESS_KWARGS
         )
         clean = _re.sub(r'\x1b\[[0-9;]*m', '', result.stdout).strip()
         try:
