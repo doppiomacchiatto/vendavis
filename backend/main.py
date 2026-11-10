@@ -196,6 +196,13 @@ def get_fields(alias: str, object_api: str):
                 "type":     f.get("type", ""),
                 "readable": f.get("filterable", True),
                 "editable": not f.get("calculated", False) and not f.get("autoNumber", False),
+                # required on create: field must be supplied when creating a record
+                # (createable=True, nillable=False, not system-defaulted on insert)
+                "required": (
+                    f.get("createable", False) and
+                    not f.get("nillable", True) and
+                    not f.get("defaultedOnCreate", False)
+                ),
             }
             for f in raw_fields
         ]

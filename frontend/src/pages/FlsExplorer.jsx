@@ -22,6 +22,26 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
   const [debugLog,    setDebugLog]    = useState([]);
   const [fieldPage,   setFieldPage]   = useState(0);
   const FIELD_PAGE_SIZE = 20;
+  const [fieldSort,   setFieldSort]   = useState({ col: "label", dir: "asc" });
+
+  function toggleSort(col) {
+    setFieldSort(s => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
+    setFieldPage(0);
+  }
+
+  function sortedFields(flds) {
+    const { col, dir } = fieldSort;
+    return [...flds].sort((a, b) => {
+      let av = a[col] ?? "";
+      let bv = b[col] ?? "";
+      // boolean columns: sort true first when asc
+      if (typeof av === "boolean") { av = av ? 0 : 1; bv = bv ? 0 : 1; }
+      else { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
+      if (av < bv) return dir === "asc" ? -1 : 1;
+      if (av > bv) return dir === "asc" ?  1 : -1;
+      return 0;
+    });
+  }
 
   function log(msg, type = "info") {
     const ts = new Date().toISOString().slice(11, 23);
@@ -285,23 +305,45 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
           <div className="flex-1 overflow-auto">
             {fields.length > 0 && (
               <table className="w-full text-sm border-collapse">
-                <thead className="sticky top-0 bg-gray-100 dark:bg-gray-700 text-left text-xs uppercase text-gray-500 tracking-wider">
+                <thead className="sticky top-0 bg-gray-100 dark:bg-gray-700 text-left text-xs uppercase text-gray-500 tracking-wider select-none">
                   <tr>
-                    <th className="px-3 py-2">Label</th>
-                    <th className="px-3 py-2">API Name</th>
-                    <th className="px-3 py-2">Type</th>
-                    <th className="px-3 py-2 text-center">Readable</th>
-                    <th className="px-3 py-2 text-center">Editable</th>
+                    {[
+                      { col: "label",    label: "Label",    cls: "" },
+                      { col: "apiName",  label: "API Name", cls: "" },
+                      { col: "type",     label: "Type",     cls: "" },
+                      { col: "required", label: "Req",      cls: "text-center", title: "Required on record create" },
+                      { col: "readable", label: "Readable", cls: "text-center" },
+                      { col: "editable", label: "Editable", cls: "text-center" },
+                    ].map(({ col, label, cls, title }) => (
+                      <th
+                        key={col}
+                        title={title}
+                        onClick={() => toggleSort(col)}
+                        className={`px-3 py-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${cls}`}
+                      >
+                        {label}
+                        {fieldSort.col === col && (
+                          <span className="ml-1 text-blue-500">{fieldSort.dir === "asc" ? "↑" : "↓"}</span>
+                        )}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {fields
+                  {sortedFields(fields)
                     .slice(fieldPage * FIELD_PAGE_SIZE, (fieldPage + 1) * FIELD_PAGE_SIZE)
                     .map((f, i) => (
-                    <tr key={f.apiName} className={i % 2 === 0 ? "bg-white dark:bg-gray-800" : "bg-gray-50"}>
+                    <tr key={f.apiName} className={i % 2 === 0 ? "bg-white dark:bg-gray-800" : "bg-gray-50 dark:bg-gray-750"}>
                       <td className="px-3 py-1.5 truncate max-w-xs">{f.label}</td>
                       <td className="px-3 py-1.5 font-mono text-xs text-gray-500 truncate">{f.apiName}</td>
                       <td className="px-3 py-1.5 text-gray-500 text-xs">{f.type}</td>
+                      <td className="px-3 py-1.5 text-center">
+                        {f.required && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" title="Required on create">
+                            *
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-1.5 text-center text-green-600">{f.readable ? "✓" : ""}</td>
                       <td className="px-3 py-1.5 text-center text-green-600">{f.editable ? "✓" : ""}</td>
                     </tr>
