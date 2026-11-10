@@ -9,9 +9,23 @@ This is the "pick up here" note. The full reference (architecture, Windows desig
 
 ---
 
+## Plan for the next session: full cleanup
+
+Start with the **full cleanup** — Next steps item 9 below has the complete inventory. In order:
+
+1. **Frontend rename:** `ClaudeChat.jsx` / `ClaudeChat` → `OpenCodeChat`; update `App.jsx` (import, usage, `"claude"` tab id) and the `healthChecks.js` comment.
+2. **Endpoint switch, then alias removal:** point `SoqlRunner.jsx` and `ApexRunner.jsx` at `/api/ai/chat`, then delete `/api/claude/chat` (`claude_chat_compat`) in `backend/main.py`. Switch first, delete second.
+3. **Delete the Tkinter app and the old Claude client:** `sf_fls_exporter.py`, `backend/claude_client.py`; fix the README tree, the three "for sf_fls_exporter" docstrings (`sf_cli.py`, `excel_builder.py`, `query_history.py`) and the `sf_backend.spec` comment.
+4. **Drop legacy config fallbacks:** `~/.sf_tools_config.json` (SOQL Explorer) and `~/.anthropic_key` in `ai_client.py`; the `legacy` handling and `key_source: "legacy"` in `GET /api/settings`; the "using key from SOQL Explorer config" label in Settings; README "Config priority" item 4; matching `.gitignore` entries.
+5. **Verify, then ship:** `cd frontend; npm run build`, `cd backend; .\.venv\Scripts\python.exe -c "import main"`, hit `/api/settings` and `/api/models`, then `npm run tauri:build`, install, click through SOQL + Apex AI and Settings, commit and push to `opencode/mvp-0`.
+
+Developer decisions already made for this cleanup: the Tkinter app is **not** part of this branch; the SOQL Explorer legacy config is **not** needed. The developer's own setup (`~/.vendavis_api_key`, `~/.vendavis_config.json`) is unaffected. Keep the Anthropic provider preset, the `anthropic_compat` block in `opencode.config.json`, Claude model ids in the picker, and `ANTHROPIC_API_KEY` as an env-var fallback — those are provider support, not leftovers.
+
+---
+
 ## Paste this to start the session
 
-> I'm continuing work on Vendavis, a Tauri v2 + React + FastAPI desktop Salesforce metadata explorer, at `C:\Users\juan\dev\app\vendavis` (branch `opencode/mvp-0`). Read `HANDOFF-2026-11-09-opencode-session.md` and then `HANDOFF-2026-11-09.md` in that folder. I'm on Windows/PowerShell. Push only to `opencode/mvp-0` — no PR, nothing to `main`. Keep the AI layer vendor-neutral. Start with the "Next steps" list.
+> I'm continuing work on Vendavis, a Tauri v2 + React + FastAPI desktop Salesforce metadata explorer, at `C:\Users\juan\dev\app\vendavis` (branch `opencode/mvp-0`). Read `HANDOFF-2026-11-09-opencode-session.md` and then `HANDOFF-2026-11-09.md` in that folder. I'm on Windows/PowerShell. Push only to `opencode/mvp-0` — no PR, nothing to `main`. Keep the AI layer vendor-neutral. Start with "Plan for the next session: full cleanup", then the "Next steps" list.
 
 An assistant needs file + command access to do real work (shell + filesystem, or an agent running in the project folder).
 
