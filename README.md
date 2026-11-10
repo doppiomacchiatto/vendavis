@@ -12,7 +12,7 @@ sf-metadata-exp-electron/
 │   ├── platform_env.py   # OS-specific PATH & tool-discovery abstraction
 │   ├── excel_builder.py
 │   ├── query_history.py
-│   └── claude_client.py
+│   └── ai_client.py      # Provider-agnostic AI client (OpenAI-compatible API)
 ├── src-tauri/
 │   ├── src/main.rs       # Tauri shell — spawns backend binary, creates window
 │   └── tauri.conf.json
@@ -131,10 +131,83 @@ npx tauri build
 
 ## Environment variables
 
-| Variable            | Default | Purpose                        |
-|---------------------|---------|--------------------------------|
-| `SF_BACKEND_PORT`   | 7891    | Port for FastAPI server        |
-| `ANTHROPIC_API_KEY` | —       | Claude API key (or `~/.anthropic_key`) |
+| Variable             | Default | Purpose                                                        |
+|----------------------|---------|----------------------------------------------------------------|
+| `SF_BACKEND_PORT`    | 7891    | Port for FastAPI server                                        |
+| `VENDAVIS_DEBUG`     | off     | `1` logs every `sf` CLI call and its duration to the backend console |
+| `OPENCODE_API_KEY`   | —       | AI provider API key (`ANTHROPIC_API_KEY` is also read). Overrides the key saved in Settings |
+| `OPENCODE_BASE_URL`  | —       | AI gateway URL. Overrides the URL saved in Settings            |
+| `OPENCODE_MODEL`     | —       | AI model id. Overrides the model saved in Settings             |
+
+---
+
+## AI assistant configuration (OpenCode and other providers)
+
+The OpenCode tab and the AI panels in SOQL Runner and Apex Runner talk to any **OpenAI-compatible** provider. You are not tied to one vendor: pick a provider, paste a key and choose a model, all from **⚙ Settings** in the top bar. AI features are optional; the rest of the app works without a key.
+
+### Configure in Settings
+
+1. Click **⚙ Settings**.
+2. Choose a **Provider**. This fills in the **Gateway URL** and shows the right key format.
+3. Paste your **API Key**. Leave it blank to keep the key already saved.
+4. Pick a **Model**. The list is fetched live from the provider; click **↻ Refresh list** after changing the key or gateway. If the provider can't be reached, a built-in list is shown with the reason.
+5. Click **Save**.
+
+### Providers
+
+| Provider | Gateway URL | API key | Notes |
+|---|---|---|---|
+| OpenCode | `https://opencode.ai/inference/openai/v1` | `oc_sk_…` | Create a personal key at opencode.ai/console → Account → Personal API keys. Pay-as-you-go: the workspace needs credits and the model must be enabled in the workspace. Free-tier models only work inside OpenCode itself |
+| OpenAI (ChatGPT models) | `https://api.openai.com/v1` | `sk-…` | |
+| Anthropic (Claude) | `https://api.anthropic.com/v1` | `sk-ant-…` | Create a key at console.anthropic.com → Settings → API keys |
+| Google (Gemini) | `https://generativelanguage.googleapis.com/v1beta/openai` | `AIza…` | |
+| OpenRouter | `https://openrouter.ai/api/v1` | `sk-or-…` | Llama and many other models |
+| Groq | `https://api.groq.com/openai/v1` | `gsk_…` | Hosted Llama |
+| Ollama (local) | `http://localhost:11434/v1` | not needed | Lists the models you have pulled. Any `localhost` gateway works without a key |
+| Custom | your URL | your key | Any OpenAI-compatible gateway (LiteLLM, vLLM, LM Studio, …) |
+
+**Auto** (blank gateway): an `oc_sk_` key uses the OpenCode gateway; any other key goes to OpenAI.
+
+> The key used by the OpenCode terminal app or desktop app is stored separately and is not shared with Vendavis. Vendavis keeps its own key, so create or paste one in Settings.
+
+### Where settings are stored
+
+| Setting | Location |
+|---|---|
+| API key | `~/.vendavis_api_key` (plain text, written by Settings) |
+| Model and gateway URL | `~/.vendavis_config.json` |
+
+Treat `~/.vendavis_api_key` like any credential file. To remove the key, delete the file.
+
+### Config priority
+
+For each of key, gateway URL and model, the first source that has a value wins:
+
+1. `opencode.config.json` (project root, developer override; see the file for reference provider blocks)
+2. `OPENCODE_API_KEY` / `OPENCODE_BASE_URL` / `OPENCODE_MODEL` environment variables
+3. Values saved in Settings (`~/.vendavis_api_key`, `~/.vendavis_config.json`)
+4. The legacy SOQL Explorer config (`~/.sf_tools_config.json`)
+
+If Settings changes seem to be ignored in dev, check that `opencode.config.json` and the env vars above don't set the same value.
+
+### Troubleshooting
+
+| Error | Cause and fix |
+|---|---|
+| `401 Incorrect API key provided … platform.openai.com` | The gateway URL is blank, so the key was sent to OpenAI. Choose the matching **Provider** in Settings |
+| `401 Invalid credential` | The key isn't valid for that provider (for example an OpenAI key sent to OpenCode). Paste the right key |
+| `401 invalid x-api-key` | Anthropic rejected the key. Create a new key in the Anthropic console |
+| `403 Model access is disabled` | The model id isn't enabled for your account or workspace. Pick a model from the refreshed list |
+| `Insufficient account funds` | The provider account has no credit. Add credit with that provider |
+| "Couldn't fetch models" under the Model picker | Check the key and gateway URL, then **↻ Refresh list**. The built-in list is shown meanwhile |
+
+---
+
+## Debugging
+
+- **🐞 Debug** (top bar) opens a log of every backend API call with its duration, plus `load_objects` start, finish and a progress heartbeat. It has Filter, Copy and Clear.
+- Each tab (FLS Explorer, Profiles & PermSets, SOQL Runner, Apex Runner) also has a collapsible **Debug Log** panel at the bottom with the same Filter, Copy and Clear controls.
+- Set `VENDAVIS_DEBUG=1` before launching the backend to log each Salesforce CLI command and how long it took.
 
 ---
 
