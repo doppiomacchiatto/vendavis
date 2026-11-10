@@ -1,11 +1,11 @@
-# SF Metadata Explorer v2 — Electron + React + FastAPI
+# Vendavis — Tauri + React + FastAPI
 
 Cross-platform desktop app (macOS · Windows · Linux).
 
 ## Architecture
 
 ```
-sf-metadata-exp-electron/
+vendavis/
 ├── backend/              # Python FastAPI server (localhost REST)
 │   ├── main.py           # FastAPI app, all routes
 │   ├── sf_cli.py         # Salesforce CLI wrappers (delegates to platform_env)
