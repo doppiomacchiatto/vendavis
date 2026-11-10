@@ -261,6 +261,8 @@ fn main() {
 
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(BackendPort(port))
         .manage(BackendProcess(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
