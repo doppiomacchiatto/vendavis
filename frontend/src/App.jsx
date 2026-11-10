@@ -291,6 +291,13 @@ export default function App() {
             </div>
           </div>
           <button
+            onClick={() => invoke("open_file", { path: `http://localhost:${window.__SF_BACKEND_PORT__ || 7891}/docs` })}
+            className="text-sm bg-blue-600 hover:bg-blue-500 border border-blue-400 rounded px-3 py-1 transition-colors font-mono"
+            title="Open FastAPI Swagger docs in browser"
+          >
+            API
+          </button>
+          <button
             onClick={() => setDebugOpen(true)}
             className="text-sm bg-blue-600 hover:bg-blue-500 border border-blue-400 rounded px-3 py-1 transition-colors"
             title="Debug log"
