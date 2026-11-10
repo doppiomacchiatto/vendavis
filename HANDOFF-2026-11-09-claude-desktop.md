@@ -96,5 +96,5 @@ Launch the installed app, find the backend's port (it is dynamic in release buil
 - **`@opencode/sdk` vs `@opencode/client` vs `@opencode-ai/sdk`** are three different packages; none is a drop-in chat client. See section 4 of the main handoff.
 - **Tauri v2 capabilities:** list `core:event:allow-listen` and `core:event:allow-emit` explicitly; `core:event:default` doesn't exist.
 - **LF/CRLF warnings** from git on Windows are harmless. When scripting edits in PowerShell, write files as UTF-8 without BOM and avoid line-ending rewrites (check `git diff --stat`).
-- **The old `vendavis-handoff.docx` is deleted** (in git history). `HANDOFF.md` is from the Tkinter era and `HANDOFF-2026-11-05.md` covers feature work; both are background only.
+- **Old handoffs are deleted** (in git history): `vendavis-handoff.docx`, `HANDOFF.md` (Tkinter era) and `HANDOFF-2026-11-05.md` (feature work).
 - **Don't query or export real org data casually** — `vrm`, `gbr`, `san` are the developer's real orgs. Read-only limits/version calls are fine; ask before exports or anything that writes.
