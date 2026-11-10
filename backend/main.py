@@ -29,7 +29,7 @@ from sf_cli import (list_orgs, list_objects, describe_object, run_apex_anonymous
 from sf_cli import _sf as _sf_raw   # for raw SOQL
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
-from ai_client import AIClient, save_config, _load_vendavis_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config
+from ai_client import AIClient, PROVIDER_PRESETS, fetch_models, needs_key, save_config, _load_vendavis_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config
 
 app = FastAPI(title="Vendavis", version="2.0.0")
 
@@ -74,6 +74,12 @@ _ai = AIClient()
 # ---------------------------------------------------------------------------
 
 AVAILABLE_MODELS = [
+    # OpenCode gateway (oc_sk_ keys) — ids must be enabled in the Console workspace
+    {"id": "claude-haiku-5-5",          "label": "Claude Haiku 5.5  — OpenCode, fastest and cheapest"},
+    {"id": "claude-sonnet-5-5",         "label": "Claude Sonnet 5.5 — OpenCode, balanced (recommended)"},
+    {"id": "claude-opus-5-5",           "label": "Claude Opus 5.5   — OpenCode, most capable"},
+    {"id": "gpt-5.4-mini",              "label": "GPT 5.4 Mini      — OpenCode, low cost"},
+    {"id": "deepseek-v4.1-flash",       "label": "DeepSeek V4.1 Flash — OpenCode, low cost"},
     # OpenAI
     {"id": "gpt-4o",                    "label": "GPT-4o          — OpenAI flagship, fast and capable"},
     {"id": "gpt-4o-mini",               "label": "GPT-4o mini     — OpenAI lightweight, low cost"},
@@ -103,14 +109,35 @@ def get_settings():
         pass
     # Surface the effective base_url (vendavis config takes priority, then legacy)
     effective_url = cfg.get("base_url", "").strip() or legacy.get("base_url", "").strip()
+    if not needs_key(effective_url):
+        key_set = True   # local servers (Ollama etc.) run without a key
     return {
         "key_set":       key_set,
+        "providers":     PROVIDER_PRESETS,
         "model":         cfg.get("model", ""),
         "base_url":      effective_url,
         "models":        AVAILABLE_MODELS,
         "key_source":    "vendavis" if (Path.home() / ".vendavis_api_key").exists() else
                          ("legacy" if legacy.get("api_key") else "none"),
     }
+
+class ModelsRequest(BaseModel):
+    api_key:  Optional[str] = None
+    base_url: Optional[str] = None
+
+@app.post("/api/models")
+def post_models(req: ModelsRequest):
+    """Live model list from the configured provider; falls back to the built-in list.
+
+    Accepts unsaved key/base_url from the Settings form so the picker can refresh before saving.
+    """
+    try:
+        ids = fetch_models(req.api_key, req.base_url)
+        if not ids:
+            raise RuntimeError("provider returned no models")
+        return {"source": "live", "models": [{"id": i, "label": i} for i in ids]}
+    except Exception as e:
+        return {"source": "fallback", "error": str(e)[:300], "models": AVAILABLE_MODELS}
 
 @app.post("/api/settings")
 def post_settings(req: SettingsRequest):

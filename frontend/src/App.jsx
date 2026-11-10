@@ -70,6 +70,9 @@ export default function App() {
   const [settingsOpen,  setSettingsOpen]  = useState(false);
   const [settingsDraft, setSettingsDraft] = useState({ api_key: "", model: "", base_url: "" });
   const [availModels,   setAvailModels]   = useState([]);
+  const [providers,     setProviders]     = useState([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsNote,    setModelsNote]    = useState("");
   const [settingsSaved, setSettingsSaved] = useState("");   // "" | "saved" | "error:<msg>"
   const [settingsKeySet,setSettingsKeySet]= useState(false);
   const [settingsKeySource, setSettingsKeySource] = useState("none"); // "vendavis"|"legacy"|"none"
@@ -80,10 +83,46 @@ export default function App() {
     api("/api/settings").then((d) => {
       setSettingsDraft({ api_key: "", model: d.model || "", base_url: d.base_url || "" });
       setAvailModels(d.models || []);
+      setProviders(d.providers || []);
       setSettingsKeySet(d.key_set || false);
       setSettingsKeySource(d.key_source || "none");
+      if (d.key_set) refreshModels({ base_url: d.base_url || "" });
     }).catch(() => {});
   }, [settingsOpen]);
+
+  const normUrl = (u) => (u || "").trim().replace(/\/+$/, "");
+  const activeProvider =
+    providers.find((p) => p.base_url && normUrl(p.base_url) === normUrl(settingsDraft.base_url))
+    || (settingsDraft.base_url ? providers.find((p) => p.id === "custom") : null);
+
+  function pickProvider(id) {
+    const p = providers.find((x) => x.id === id);
+    const base_url = p ? (p.id === "custom" ? settingsDraft.base_url : p.base_url) : "";
+    const next = { ...settingsDraft, base_url };
+    setSettingsDraft(next);
+    if (p && p.id !== "custom") refreshModels(next);
+  }
+
+  // Ask the backend for the provider's live model list (uses unsaved form values if given)
+  async function refreshModels(draft = settingsDraft) {
+    setModelsLoading(true);
+    setModelsNote("");
+    try {
+      const d = await api("/api/models", {
+        method: "POST",
+        body: JSON.stringify({ api_key: draft.api_key || null, base_url: draft.base_url || null }),
+      });
+      setAvailModels(d.models || []);
+      setModelsNote(d.source === "live"
+        ? `${(d.models || []).length} models from your provider`
+        : `Couldn't fetch models — showing built-in list${d.error ? ` (${d.error.split("\n")[0]})` : ""}`);
+      debugLog(`models: ${d.source}${d.error ? ` — ${d.error}` : ` (${(d.models || []).length})`}`, d.source === "live" ? "done" : "warn");
+    } catch (e) {
+      setModelsNote(`Couldn't fetch models: ${e.message.split("\n")[0]}`);
+    } finally {
+      setModelsLoading(false);
+    }
+  }
 
   async function saveSettings() {
     try {
@@ -535,6 +574,21 @@ export default function App() {
             </div>
 
             <div className="flex flex-col gap-4 text-sm">
+              {/* Provider preset */}
+              <label className="flex flex-col gap-1">
+                <span className="font-medium text-gray-700 dark:text-gray-300">Provider</span>
+                <select
+                  value={activeProvider?.id || ""}
+                  onChange={(e) => pickProvider(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="">Auto (OpenCode key → OpenCode, otherwise OpenAI)</option>
+                  {providers.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              </label>
+
               {/* API Key */}
               <label className="flex flex-col gap-1">
                 <span className="font-medium text-gray-700 dark:text-gray-300">
@@ -548,7 +602,11 @@ export default function App() {
                 </span>
                 <input
                   type="password"
-                  placeholder={settingsKeySet ? "••••••••••••••••••••••••" : "oc_sk_… (OpenCode) or sk-… (OpenAI)"}
+                  placeholder={
+                    activeProvider?.needs_key === false ? "Not needed for a local server"
+                    : settingsKeySet ? "••••••••••••••••••••••••"
+                    : activeProvider?.key_hint || "oc_sk_… (OpenCode) or sk-… (OpenAI)"
+                  }
                   value={settingsDraft.api_key}
                   onChange={(e) => setSettingsDraft((d) => ({ ...d, api_key: e.target.value }))}
                   className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
@@ -560,7 +618,7 @@ export default function App() {
               <label className="flex flex-col gap-1">
                 <span className="font-medium text-gray-700 dark:text-gray-300">
                   Gateway URL
-                  <span className="ml-1 text-xs text-gray-400 font-normal">(blank = OpenCode gateway for oc_sk_ keys, otherwise OpenAI)</span>
+                  <span className="ml-1 text-xs text-gray-400 font-normal">(filled in by Provider; edit for a custom gateway)</span>
                 </span>
                 <input
                   type="text"
@@ -573,17 +631,32 @@ export default function App() {
 
               {/* Model picklist */}
               <label className="flex flex-col gap-1">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Model</span>
+                <span className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                  Model
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); refreshModels(); }}
+                    disabled={modelsLoading}
+                    className="text-xs font-normal text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                    title="Fetch the model list from your provider using the key and gateway above"
+                  >
+                    {modelsLoading ? "Fetching…" : "↻ Refresh list"}
+                  </button>
+                </span>
                 <select
                   value={settingsDraft.model}
                   onChange={(e) => setSettingsDraft((d) => ({ ...d, model: e.target.value }))}
                   className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 >
                   <option value="">Default (from opencode.config.json or gpt-4o)</option>
+                  {settingsDraft.model && !availModels.some((m) => m.id === settingsDraft.model) && (
+                    <option value={settingsDraft.model}>{settingsDraft.model} (current)</option>
+                  )}
                   {availModels.map((m) => (
                     <option key={m.id} value={m.id}>{m.label}</option>
                   ))}
                 </select>
+                {modelsNote && <span className="text-xs text-gray-400">{modelsNote}</span>}
               </label>
             </div>
 

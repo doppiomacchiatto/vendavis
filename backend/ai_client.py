@@ -150,17 +150,78 @@ def _load_model() -> str:
     return cfg.get("model", "").strip() or DEFAULT_MODEL
 
 
+# Presets shown in Settings. Every one speaks the OpenAI-compatible API
+# (chat/completions + /models); Azure OpenAI is not included because it needs
+# per-deployment URLs and an api-version.
+PROVIDER_PRESETS = [
+    {"id": "opencode",   "label": "OpenCode (Console gateway)",       "base_url": OPENCODE_GATEWAY_URL,                                       "key_hint": "oc_sk_…"},
+    {"id": "openai",     "label": "OpenAI (ChatGPT models)",          "base_url": "https://api.openai.com/v1",                                "key_hint": "sk-…"},
+    {"id": "anthropic",  "label": "Anthropic (Claude)",               "base_url": "https://api.anthropic.com/v1",                             "key_hint": "sk-ant-…"},
+    {"id": "google",     "label": "Google (Gemini)",                  "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",  "key_hint": "AIza…"},
+    {"id": "openrouter", "label": "OpenRouter (Llama and many more)", "base_url": "https://openrouter.ai/api/v1",                             "key_hint": "sk-or-…"},
+    {"id": "groq",       "label": "Groq (Llama, fast)",               "base_url": "https://api.groq.com/openai/v1",                           "key_hint": "gsk_…"},
+    {"id": "ollama",     "label": "Ollama (local Llama)",             "base_url": "http://localhost:11434/v1",                                "key_hint": "not needed", "needs_key": False},
+    {"id": "custom",     "label": "Custom gateway",                   "base_url": "",                                                         "key_hint": "your gateway key"},
+]
+
+_NON_CHAT_HINTS = ("embed", "whisper", "tts", "dall-e", "moderation", "davinci", "babbage",
+                   "transcribe", "realtime", "rerank", "image", "audio")
+
+
+def _is_local(url: str) -> bool:
+    return any(h in (url or "") for h in ("localhost", "127.0.0.1", "[::1]"))
+
+
+def _client_kwargs(api_key: str, url: str) -> dict:
+    """Constructor kwargs for openai.OpenAI, with per-vendor quirks applied."""
+    key = (api_key or "").strip()
+    if not key:
+        if _is_local(url):
+            key = "not-needed"   # Ollama / LM Studio ignore the key but the SDK requires one
+        else:
+            key = _load_api_key()   # raises a helpful error if none is configured
+    kwargs: dict = {"api_key": key}
+    if url:
+        kwargs["base_url"] = url
+    if "anthropic.com" in url:
+        # Anthropic's /models endpoint rejects requests without a version header
+        kwargs["default_headers"] = {"anthropic-version": "2023-06-01"}
+    return kwargs
+
+
+def needs_key(url: str) -> bool:
+    return not _is_local(url)
+
+
+def fetch_models(api_key: Optional[str] = None, base_url: Optional[str] = None) -> list[str]:
+    """List chat-capable model ids from the provider's OpenAI-compatible /models endpoint.
+
+    Pass api_key/base_url to test unsaved Settings values; otherwise the saved
+    config is used. Raises on failure so the caller can fall back.
+    """
+    url = (base_url or "").strip() or _load_base_url()
+    # Don't mix a typed-in URL with a different vendor's saved key by accident: a blank
+    # key falls back to the saved one, which is the normal "just refresh" case.
+    kwargs = _client_kwargs((api_key or "").strip(), url)
+    kwargs.update(timeout=10.0, max_retries=0)
+    page = openai.OpenAI(**kwargs).models.list()
+    ids = []
+    for m in page.data:
+        mid = m.id.removeprefix("models/")   # Gemini prefixes ids with "models/"
+        if not any(h in mid.lower() for h in _NON_CHAT_HINTS):
+            ids.append(mid)
+    if "anthropic.com" not in url:
+        ids.sort(key=str.lower)   # Anthropic already returns newest first
+    return ids
+
+
 class AIClient:
     def __init__(self):
         self._client: Optional[openai.OpenAI] = None  # lazy — recreated when config changes
 
     def _get_client(self, force_refresh: bool = False) -> openai.OpenAI:
         if self._client is None or force_refresh:
-            base_url = _load_base_url() or None
-            kwargs: dict = {"api_key": _load_api_key()}
-            if base_url:
-                kwargs["base_url"] = base_url
-            self._client = openai.OpenAI(**kwargs)
+            self._client = openai.OpenAI(**_client_kwargs("", _load_base_url()))
         return self._client
 
     def _model(self) -> str:
