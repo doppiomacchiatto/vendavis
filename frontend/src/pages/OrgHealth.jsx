@@ -5,6 +5,7 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "../api/client";
 import Spinner from "../components/Spinner";
+import DebugLogPanel from "../components/DebugLogPanel";
 import {
   HEALTH_CHECKS, CHECK_CATEGORIES,
   CATEGORY_ICONS, STATUS_ICON, STATUS_COLOR,
@@ -185,8 +186,17 @@ export default function OrgHealth({ org, onApiCall }) {
   const [current,  setCurrent]  = useState(null);
   const [activeCategory, setActiveCategory] = useState(null);
   const [runScope, setRunScope] = useState(null); // null = all, string = single category
+  const [debugLog,  setDebugLog]  = useState([]);
+  const [debugOpen, setDebugOpen] = useState(false);
   const cancelRef = useRef(false);
   const lastOrg   = useRef(null);
+
+  function log(msg, type = "info") {
+    const ts = new Date().toISOString().slice(11, 23);
+    const icon = type === "error" ? "❌" : type === "success" ? "✅" : type === "warn" ? "⚠️" : "ℹ️";
+    setDebugLog((l) => [...l, { ts, icon, msg }]);
+    if (type === "error") setDebugOpen(true);
+  }
 
   // Reset when org changes
   useEffect(() => {
@@ -208,6 +218,8 @@ export default function OrgHealth({ org, onApiCall }) {
       : HEALTH_CHECKS;
     setRunScope(filterCat ?? null);
     setPhase("running");
+    setDebugLog([]);
+    log(`Starting ${checksToRun.length} check(s)${filterCat ? ` in ${filterCat}` : ""}…`);
     // Keep existing results for other categories when running a single one
     if (filterCat) {
       setResults(r => {
@@ -228,20 +240,28 @@ export default function OrgHealth({ org, onApiCall }) {
       const chk = checksToRun[i];
       setCurrent({ idx: i, total: checksToRun.length, label: chk.label, category: chk.category });
       setResults(r => ({ ...r, [chk.id]: null }));
+      const t0 = Date.now();
       try {
         const result = await chk.run(org.alias, api);
+        const ms = Date.now() - t0;
         if (!cancelRef.current) {
           setResults(r => ({ ...r, [chk.id]: result }));
           onApiCall?.();
+          const type = result?.status === "fail" ? "error" : result?.status === "warn" ? "warn" : "success";
+          log(`${chk.label} — ${result?.status ?? "done"} (${ms}ms)`, type);
         }
       } catch (e) {
-        if (!cancelRef.current)
+        const ms = Date.now() - t0;
+        if (!cancelRef.current) {
           setResults(r => ({ ...r, [chk.id]: { status: "fail", detail: e.message } }));
+          log(`${chk.label} — error: ${e.message} (${ms}ms)`, "error");
+        }
       }
     }
     if (!cancelRef.current) {
       setCurrent(null);
       setPhase("done");
+      log(`All checks complete.`, "success");
     }
   }
 
@@ -407,6 +427,14 @@ export default function OrgHealth({ org, onApiCall }) {
           )}
         </div>
       </div>
+
+      {/* ── Debug log ───────────────────────────────────────────────────────── */}
+      <DebugLogPanel
+        entries={debugLog}
+        open={debugOpen}
+        onToggle={() => setDebugOpen((o) => !o)}
+        onClear={() => setDebugLog([])}
+      />
     </div>
   );
 }
