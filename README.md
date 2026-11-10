@@ -1,4 +1,4 @@
-# SF Metadata Explorer v2 — Electron + React + FastAPI
+# SF Metadata Explorer v2 — Tauri + React + FastAPI
 
 Cross-platform desktop app (macOS · Windows · Linux).
 
@@ -12,17 +12,16 @@ sf-metadata-exp-electron/
 │   ├── platform_env.py   # OS-specific PATH & tool-discovery abstraction
 │   ├── excel_builder.py
 │   ├── query_history.py
-│   └── claude_client.py
+│   └── claude_client.py  # Claude AI client (Anthropic SDK)
 ├── src-tauri/
 │   ├── src/main.rs       # Tauri shell — spawns backend binary, creates window
 │   └── tauri.conf.json
-├── frontend/             # React + Vite + Tailwind
-│   └── src/
-│       ├── App.jsx
-│       ├── api/client.js        # fetch wrapper with port injection
-│       ├── components/          # OrgPickerModal, TabBar, Spinner, …
-│       └── pages/               # FlsExplorer, SoqlRunner, ApexRunner, OrgHealth, ClaudeChat
-└── sf_fls_exporter.py    # Original Tkinter app (preserved for reference)
+└── frontend/             # React + Vite + Tailwind
+    └── src/
+        ├── App.jsx
+        ├── api/client.js        # fetch wrapper with port injection
+        ├── components/          # OrgPickerModal, TabBar, Spinner, …
+        └── pages/               # FlsExplorer, SoqlRunner, ApexRunner, OrgHealth, ClaudeChat
 ```
 
 ---

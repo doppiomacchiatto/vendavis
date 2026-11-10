@@ -1,7 +1,7 @@
 """
 sf-metadata-exp — FastAPI backend
 Serves all Salesforce, Claude, and Excel operations over localhost REST.
-Launched as a child process by Electron; port is passed via SF_BACKEND_PORT env var
+Launched as a child process by Tauri; port is passed via SF_BACKEND_PORT env var
 or defaults to 7891.
 """
 from __future__ import annotations
