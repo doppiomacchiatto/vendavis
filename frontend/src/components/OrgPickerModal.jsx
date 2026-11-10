@@ -1,23 +1,23 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import Spinner from "./Spinner";
+import { debugLog } from "../debugLog";
 
 export default function OrgPickerModal({ onSelect }) {
   const [orgs,          setOrgs]          = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [error,         setError]         = useState("");
   const [chosen,        setChosen]        = useState("");
-  const [log,           setLog]           = useState([]);
   const [startupStatus, setStartupStatus] = useState("starting"); // "starting" | "ready" | null
 
-  function addLog(msg) {
-    setLog((l) => [...l, `${new Date().toISOString().slice(11,23)} ${msg}`]);
+  function addLog(msg, level = "info") {
+    debugLog(`[OrgPicker] ${msg}`, level);
   }
 
   useEffect(() => {
     async function init() {
       // 1. Health check — retry up to 10s to allow bundled backend to start
-      addLog("Starting data services…");
+      addLog("Starting data services…", "start");
       setStartupStatus("starting");
       const MAX_ATTEMPTS = 20;
       const DELAY_MS = 500;
@@ -28,7 +28,7 @@ export default function OrgPickerModal({ onSelect }) {
           healthy = true;
           break;
         } catch {
-          if (i === 0) addLog("Waiting for data services to start…");
+          if (i === 0) addLog("Waiting for data services to start…", "info");
           await new Promise(r => setTimeout(r, DELAY_MS));
         }
       }
@@ -36,47 +36,47 @@ export default function OrgPickerModal({ onSelect }) {
         const msg =
           "Cannot reach the backend server.\n" +
           "Start it with: npm run dev:backend";
-        addLog("❌ " + msg);
+        addLog("❌ " + msg, "error");
         setError(msg);
         setStartupStatus(null);
         setLoading(false);
         return;
       }
-      addLog("✅ Data services ready");
+      addLog("✅ Data services ready", "done");
       setStartupStatus("ready");
       // Brief pause so user sees "ready" before it disappears
       await new Promise(r => setTimeout(r, 600));
       setStartupStatus(null);
 
       // 2. Check SF CLI is available
-      addLog("Checking Salesforce CLI…");
+      addLog("Checking Salesforce CLI…", "start");
       try {
         const sfInfo = await api("/api/sf-version");
-        addLog(`✅ Salesforce CLI found (${sfInfo.version || sfInfo.sf_bin})`);
+        addLog(`✅ Salesforce CLI found (${sfInfo.version || sfInfo.sf_bin})`, "done");
       } catch (e) {
         const msg = String(e);
         // Backend returns HTTP 503 when sf/sfdx binary is not found
         if (msg.includes("503") || msg.includes("Could not find") || msg.includes("sfdx")) {
-          addLog("❌ Salesforce CLI not found");
+          addLog("❌ Salesforce CLI not found", "error");
           setError("__sf_missing__");
           setLoading(false);
           return;
         }
         // Non-CLI error (network, timeout, etc.) — log and continue
-        addLog(`⚠️ SF CLI check skipped: ${msg}`);
+        addLog(`⚠️ SF CLI check skipped: ${msg}`, "warn");
       }
 
       // 3. Load orgs
-      addLog("Fetching orgs…");
+      addLog("Fetching orgs…", "start");
       try {
         const d = await api("/api/orgs");
         const list = d.orgs || [];
-        addLog(`✅ Found ${list.length} org(s)`);
+        addLog(`✅ Found ${list.length} org(s)`, "done");
         setOrgs(list);
         const def = list.find((o) => o.isDefault);
         if (def) setChosen(def.alias);
       } catch (e) {
-        addLog(`❌ ${String(e)}`);
+        addLog(`❌ ${String(e)}`, "error");
         setError(String(e));
       } finally {
         setLoading(false);
@@ -186,14 +186,6 @@ export default function OrgPickerModal({ onSelect }) {
           Connect to org
         </button>
 
-        {/* Debug log */}
-        {log.length > 0 && (
-          <div className="bg-gray-900 rounded-lg p-2 max-h-28 overflow-y-auto">
-            {log.map((l, i) => (
-              <div key={i} className="font-mono text-xs text-green-400 whitespace-pre-wrap">{l}</div>
-            ))}
-          </div>
-        )}
         </div>{/* end inner p-6 */}
       </div>
     </div>
