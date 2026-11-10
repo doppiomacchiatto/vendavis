@@ -14,12 +14,12 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 
 const TABS = [
-  { id: "fls",      label: "FLS Explorer"       },
-  { id: "profiles", label: "Profiles & PermSets" },
-  { id: "soql",     label: "SOQL Runner"         },
-  { id: "apex",     label: "Apex Runner"         },
-  { id: "health",   label: "🏥 Health"           },
-  { id: "claude",   label: "OpenCode"             },
+  { id: "fls",      label: "🔍 FLS Explorer"       },
+  { id: "profiles", label: "👤 Profiles & PermSets" },
+  { id: "soql",     label: "⚡ SOQL Runner"         },
+  { id: "apex",     label: "🏃 Apex Runner"         },
+  { id: "health",   label: "🏥 Health"              },
+  { id: "claude",   label: "🤖 OpenCode"            },
 ];
 
 export default function App() {
