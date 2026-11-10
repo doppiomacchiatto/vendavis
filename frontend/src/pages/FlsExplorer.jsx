@@ -31,10 +31,14 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
   }
 
   // ── Load Objects — delegates to shared App.jsx loader ──────────────────────
-  function loadObjects() {
+  async function loadObjects() {
     if (!org) { log("No org selected", "error"); return; }
     log(`Loading objects from ${org.alias}…`);
-    loadObjectsShared?.();
+    const r = await loadObjectsShared?.();
+    if (!r) return;
+    if (r.status === "loaded")       log(`Loaded ${r.count} objects in ${r.secs}s`, "success");
+    else if (r.status === "skipped") log(`Objects already loaded (${r.count} cached)`);
+    else if (r.status === "error")   log(`Failed to load objects: ${r.error}`, "error");
   }
 
   // ── Load Fields ─────────────────────────────────────────────────────────────

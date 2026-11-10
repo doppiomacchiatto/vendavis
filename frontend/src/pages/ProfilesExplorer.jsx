@@ -76,10 +76,14 @@ export default function ProfilesExplorer({ org, ctx, setCtx, loadObjects: loadOb
   }
 
   // ── Load Objects — delegates to shared App.jsx loader ──────────────────────
-  function loadObjects() {
+  async function loadObjects() {
     if (!org) return;
-    log(`Loading objects…`);
-    loadObjectsShared?.();
+    log(`Loading objects from ${org.alias}…`);
+    const r = await loadObjectsShared?.();
+    if (!r) return;
+    if (r.status === "loaded")       log(`Loaded ${r.count} objects in ${r.secs}s`, "success");
+    else if (r.status === "skipped") log(`Objects already loaded (${r.count} cached)`);
+    else if (r.status === "error")   log(`Failed to load objects: ${r.error}`, "error");
   }
 
   function toggleCheck(apiName) {

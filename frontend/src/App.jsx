@@ -112,23 +112,28 @@ export default function App() {
 
   const loadObjects = useCallback(async () => {
     if (!activeOrg) return;
-    // Guard: already loaded, already in-flight, or concurrent call
-    if (orgContext.objectsLoaded || orgContext.objectsLoading) return;
-    if (objectsFetchingRef.current) return;
+    // Guard: already loaded or already in-flight
+    if (orgContext.objectsLoaded) return { status: "skipped", reason: "already loaded", count: orgContext.objects.length };
+    if (orgContext.objectsLoading || objectsFetchingRef.current) return { status: "skipped", reason: "in-flight", count: 0 };
     objectsFetchingRef.current = true;
     setOrgContext(ctx => ({ ...ctx, objectsLoading: true }));
+    const t0 = Date.now();
 
     try {
       const d = await api(`/api/orgs/${activeOrg.alias}/objects`);
       const objs = d.objects || [];
+      const secs = ((Date.now() - t0) / 1000).toFixed(1);
       setOrgContext(ctx => ({ ...ctx, objects: objs, objectsLoaded: true, objectsLoading: false }));
+      return { status: "loaded", count: objs.length, secs };
     } catch (e) {
+      const secs = ((Date.now() - t0) / 1000).toFixed(1);
       setOrgContext(ctx => ({ ...ctx, objectsLoading: false }));
       console.error("Failed to load objects:", e.message);
+      return { status: "error", error: e.message, secs };
     } finally {
       objectsFetchingRef.current = false;
     }
-  }, [activeOrg, orgContext.objectsLoaded, orgContext.objectsLoading]);
+  }, [activeOrg, orgContext.objectsLoaded, orgContext.objectsLoading, orgContext.objects.length]);
 
   const fetchLimits = useCallback(async (org) => {
     const target = org || activeOrg;
