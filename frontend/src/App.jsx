@@ -11,6 +11,7 @@ import { api } from "./api/client";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import DebugLogModal from "./components/DebugLogModal";
+import WelcomeModal, { shouldShowWelcome } from "./components/WelcomeModal";
 
 const TABS = [
   { id: "fls",      label: "🔍 FLS Explorer"       },
@@ -59,6 +60,9 @@ export default function App() {
   function handleQuitNo() {
     setQuitConfirm(false);
   }
+
+  // ── Welcome modal (shown once on first launch) ────────────────────────────
+  const [welcomeOpen, setWelcomeOpen] = useState(() => shouldShowWelcome());
 
   // ── Debug log modal ────────────────────────────────────────────────────────
   const [debugOpen, setDebugOpen] = useState(false);
@@ -165,6 +169,8 @@ export default function App() {
       {/* Org picker modal */}
       {showOrgPicker && <OrgPickerModal onSelect={handleOrgSelect} />}
 
+      {welcomeOpen && <WelcomeModal onClose={() => setWelcomeOpen(false)} />}
+
       {/* Debug log modal */}
       {debugOpen && <DebugLogModal onClose={() => setDebugOpen(false)} />}
 
@@ -231,6 +237,13 @@ export default function App() {
               </button>
               <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden
                 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
+                <button
+                  onClick={() => setWelcomeOpen(true)}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                >
+                  Getting Started
+                </button>
+                <div className="border-t border-gray-100 dark:border-gray-700" />
                 <button
                   onClick={() => { setHelpTab("about"); setAboutOpen(true); }}
                   className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
