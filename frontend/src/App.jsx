@@ -372,7 +372,7 @@ export default function App() {
                     ["📊", "SOQL Runner",          "Query any object with AI assist"],
                     ["⚙️", "Apex Runner",          "Execute and iterate anonymous Apex"],
                     ["🏥", "Org Health",           "26 checks across 7 categories"],
-                    ["🤖", "Claude AI",            "Natural language Salesforce help"],
+                    ["🤖", "OpenCode AI",          "Natural language Salesforce help"],
                   ].map(([icon, name, desc]) => (
                     <div key={name} className="flex gap-2 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
                       <span className="shrink-0 text-base">{icon}</span>
@@ -412,7 +412,7 @@ export default function App() {
                       <span className="text-xl shrink-0">⚙️</span>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-800 dark:text-white text-sm">Backend <span className="font-normal text-gray-500 dark:text-gray-400 text-xs ml-1">Python · FastAPI · uvicorn</span></p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Runs as a bundled binary on a random local port. Handles Salesforce CLI calls, Excel exports, SOQL, Apex execution, and Claude AI requests.</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Runs as a bundled binary on a random local port. Handles Salesforce CLI calls, Excel exports, SOQL, Apex execution, and OpenCode AI requests.</p>
                       </div>
                     </div>
                     {/* Arrow */}
@@ -435,7 +435,7 @@ export default function App() {
                     {[
                       ["🔐", "Authentication", "Vendavis never stores your Salesforce credentials. It uses the sessions you've already authenticated with the sf CLI — run sf org login web to add a new org."],
                       ["📡", "Data flow", "All Salesforce data stays on your machine. The backend calls the sf CLI, which calls Salesforce's REST API, then returns the result to the frontend. Nothing is sent to any third-party server."],
-                      ["🤖", "Claude AI", "AI features connect to the Anthropic API (or your internal gateway) using the API key in Settings. Org metadata is included in the prompt only when you actively use an AI feature."],
+                      ["🤖", "OpenCode AI", "AI features connect to the OpenCode gateway (or any OpenAI-compatible provider) using the API key in Settings. Org metadata is included in the prompt only when you actively use an AI feature."],
                       ["📦", "Bundled runtime", "The Python backend is compiled into a self-contained binary by PyInstaller — no Python installation required on the end-user machine."],
                     ].map(([icon, title, desc]) => (
                       <div key={title} className="flex gap-3 text-xs">
@@ -508,11 +508,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Claude API key */}
+                  {/* OpenCode API key */}
                   <div className="flex gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                     <span className="text-xl shrink-0">🤖</span>
                     <div className="flex flex-col gap-1">
-                      <p className="font-semibold text-gray-800 dark:text-white text-sm">Claude API Key <span className="text-yellow-500 text-xs font-bold ml-1">Optional</span></p>
+                      <p className="font-semibold text-gray-800 dark:text-white text-sm">OpenCode API Key <span className="text-yellow-500 text-xs font-bold ml-1">Optional</span></p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                         Required only for the OpenCode tab, SOQL AI assist, and Apex AI assistant. Configure via <strong>⚙ Settings</strong> in the toolbar or in <code>opencode.config.json</code>.
                       </p>
@@ -548,7 +548,7 @@ export default function App() {
                 </span>
                 <input
                   type="password"
-                  placeholder={settingsKeySet ? "••••••••••••••••••••••••" : "sk-… or your gateway key"}
+                  placeholder={settingsKeySet ? "••••••••••••••••••••••••" : "oc_sk_… (OpenCode) or sk-… (OpenAI)"}
                   value={settingsDraft.api_key}
                   onChange={(e) => setSettingsDraft((d) => ({ ...d, api_key: e.target.value }))}
                   className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
@@ -560,7 +560,7 @@ export default function App() {
               <label className="flex flex-col gap-1">
                 <span className="font-medium text-gray-700 dark:text-gray-300">
                   Gateway URL
-                  <span className="ml-1 text-xs text-gray-400 font-normal">(leave blank for provider default, or set in opencode.config.json)</span>
+                  <span className="ml-1 text-xs text-gray-400 font-normal">(blank = OpenCode gateway for oc_sk_ keys, otherwise OpenAI)</span>
                 </span>
                 <input
                   type="text"

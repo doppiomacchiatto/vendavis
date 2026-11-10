@@ -170,7 +170,7 @@ Be concise and direct. No need to repeat the question.`;
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
         <span className="text-sm font-semibold text-white flex items-center gap-1.5">
-          ✨ <span>Claude AI</span>
+          ✨ <span>OpenCode AI</span>
         </span>
         <div className="flex items-center gap-2">
           {messages.length > 0 && (
@@ -242,7 +242,7 @@ Be concise and direct. No need to repeat the question.`;
         {streaming && !streamBuf && (
           <div className="flex items-center gap-2 text-xs text-slate-300">
             <Spinner label="" />
-            <span>Claude is thinking…</span>
+            <span>OpenCode is thinking…</span>
           </div>
         )}
 
@@ -254,7 +254,7 @@ Be concise and direct. No need to repeat the question.`;
         <div className="flex gap-2 items-end">
           <textarea
             className="flex-1 min-h-[36px] max-h-32 text-xs font-sans border border-slate-600 rounded-lg px-3 py-2 bg-slate-800 text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none leading-5"
-            placeholder="Ask Claude about your Apex code…"
+            placeholder="Ask OpenCode about your Apex code…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -424,7 +424,7 @@ export default function ApexRunner({ org, onApiCall }) {
                 ? "bg-violet-700 hover:bg-violet-800 text-white border-violet-600"
                 : "bg-gray-100 dark:bg-gray-700 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-violet-700 dark:text-violet-300 border-violet-300 dark:border-violet-700"
             }`}
-            title="Toggle Claude AI assistant"
+            title="Toggle OpenCode AI assistant"
           >
             ✨ AI
           </button>
@@ -507,7 +507,7 @@ export default function ApexRunner({ org, onApiCall }) {
         />
       </div>
 
-      {/* ── Right: Claude AI panel ──────────────────────────────────────────── */}
+      {/* ── Right: OpenCode AI panel ──────────────────────────────────────────── */}
       {aiOpen && (
         <div className="w-1/2 flex flex-col overflow-hidden border-l border-gray-300 dark:border-gray-700">
           <AiPanel

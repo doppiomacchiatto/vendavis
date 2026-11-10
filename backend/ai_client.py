@@ -26,6 +26,7 @@ MAX_TOKENS      = 4096
 
 CONFIG_PATH      = Path.home() / ".vendavis_config.json"
 API_KEY_PATH     = Path.home() / ".vendavis_api_key"
+OPENCODE_GATEWAY_URL = "https://opencode.ai/inference/openai/v1"
 LEGACY_CFG_PATH  = Path.home() / ".sf_tools_config.json"
 
 # opencode.config.json is looked for relative to the project root.
@@ -125,7 +126,16 @@ def _load_base_url() -> str:
     if url:
         return url
     legacy = _load_legacy_config()
-    return legacy.get("base_url", "").strip()
+    url = legacy.get("base_url", "").strip()
+    if url:
+        return url
+    # OpenCode Console personal API keys (oc_sk_…) only work on OpenCode's gateway
+    try:
+        if _load_api_key().startswith("oc_sk_"):
+            return OPENCODE_GATEWAY_URL
+    except RuntimeError:
+        pass
+    return ""
 
 
 def _load_model() -> str:

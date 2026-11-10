@@ -2,7 +2,7 @@
  * SOQL Runner — SoqlX-inspired layout
  * Left: collapsible SObject browser with search + field drill-in
  * Center: SOQL editor + results table + collapsible debug log
- * Right: Claude AI split panel (toggleable)
+ * Right: OpenCode AI split panel (toggleable)
  */
 import { useState, useEffect, useRef } from "react";
 import { api, apiStream } from "../api/client";
@@ -109,7 +109,7 @@ Be concise and direct.`;
   return (
     <div className="flex flex-col h-full bg-slate-900 border-l border-slate-700">
       <div className="shrink-0 flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
-        <span className="text-sm font-semibold text-white">✨ Claude AI</span>
+        <span className="text-sm font-semibold text-white">✨ OpenCode AI</span>
         <div className="flex items-center gap-2">
           {messages.length > 0 && (
             <button onClick={() => { setMessages([]); setStreamBuf(""); }} className="text-xs text-slate-300 hover:text-red-400">🗑 Clear</button>
@@ -132,7 +132,7 @@ Be concise and direct.`;
       <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-4 min-h-0">
         {messages.length === 0 && !streaming && (
           <div className="text-xs text-slate-300 text-center pt-6 leading-relaxed px-2">
-            Ask Claude to write or explain a SOQL query.<br/>
+            Ask OpenCode to write or explain a SOQL query.<br/>
             <span className="text-slate-400">Your current query and results are sent as context.</span>
           </div>
         )}
@@ -147,7 +147,7 @@ Be concise and direct.`;
         {streaming && streamBuf && <div className="w-full"><AssistantMessage content={streamBuf} /></div>}
         {streaming && !streamBuf && (
           <div className="flex items-center gap-2 text-xs text-slate-300">
-            <Spinner label="" /><span>Claude is thinking…</span>
+            <Spinner label="" /><span>OpenCode is thinking…</span>
           </div>
         )}
         <div ref={bottomRef} />
@@ -158,7 +158,7 @@ Be concise and direct.`;
         <div className="flex gap-2 items-end">
           <textarea
             className="flex-1 min-h-[36px] max-h-32 text-xs border border-slate-600 rounded-lg px-3 py-2 bg-slate-800 text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none leading-5"
-            placeholder="Ask Claude about your SOQL query…"
+            placeholder="Ask OpenCode about your SOQL query…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); } }}
@@ -407,7 +407,7 @@ export default function SoqlRunner({ org, ctx, setCtx, loadObjects, onApiCall })
                   ? "bg-violet-700 hover:bg-violet-800 text-white border-violet-600"
                   : "bg-gray-100 dark:bg-gray-700 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-violet-700 dark:text-violet-300 border-violet-300 dark:border-violet-700"
               }`}
-              title="Toggle Claude AI"
+              title="Toggle OpenCode AI"
             >
               ✨ AI
             </button>
@@ -505,7 +505,7 @@ export default function SoqlRunner({ org, ctx, setCtx, loadObjects, onApiCall })
         />
       </div>
 
-      {/* ── Right: Claude AI panel ──────────────────────────────────────────── */}
+      {/* ── Right: OpenCode AI panel ──────────────────────────────────────────── */}
       {aiOpen && (
         <div className="w-80 flex flex-col overflow-hidden border-l border-gray-300 dark:border-gray-700 shrink-0">
           <AiPanel
