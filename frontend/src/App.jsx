@@ -13,12 +13,12 @@ import { invoke } from "@tauri-apps/api/core";
 import DebugLogModal from "./components/DebugLogModal";
 
 const TABS = [
-  { id: "fls",      label: "FLS Explorer"       },
-  { id: "profiles", label: "Profiles & PermSets" },
-  { id: "soql",     label: "SOQL Runner"         },
-  { id: "apex",     label: "Apex Runner"         },
-  { id: "health",   label: "🏥 Health"           },
-  { id: "claude",   label: "Claude AI"           },
+  { id: "fls",      label: "🔍 FLS Explorer"       },
+  { id: "profiles", label: "👤 Profiles & PermSets" },
+  { id: "soql",     label: "⚡ SOQL Runner"         },
+  { id: "apex",     label: "🏃 Apex Runner"         },
+  { id: "health",   label: "🏥 Health"              },
+  { id: "claude",   label: "🤖 Claude AI"           },
 ];
 
 export default function App() {

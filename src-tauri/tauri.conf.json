@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Vendavis — Unofficial Salesforce Tool",
+        "title": "Vendavis",
         "width": 1400,
         "height": 900,
         "minWidth": 900,
