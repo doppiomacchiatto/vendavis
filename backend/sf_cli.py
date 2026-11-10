@@ -11,11 +11,19 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from platform_env import get_platform
 
 SF_CLI = None   # resolved lazily on first call
+
+DEBUG = os.environ.get("VENDAVIS_DEBUG", "").lower() in ("1", "true", "yes")
+
+
+def _debug(msg: str) -> None:
+    if DEBUG:
+        print(f"[sf_cli] {msg}", flush=True)
 
 # Windows: don't flash a console window per sf call; always decode as UTF-8
 # (text=True alone uses the ANSI code page there). Harmless on other OSes.
@@ -92,7 +100,9 @@ def _sf(*args, timeout=120):
 
     cmd = [SF_CLI, *args, "--json"]
     env = {**os.environ, "PATH": _augmented_path()}
+    t0 = time.time()
     result = subprocess.run(cmd, timeout=timeout, env=env, **SUBPROCESS_KWARGS)
+    _debug(f"sf {' '.join(args)[:200]} -> rc={result.returncode} ({time.time()-t0:.1f}s)")
 
     import re as _re
     # Strip ANSI color codes before parsing
@@ -222,12 +232,64 @@ def list_orgs():
     return unique
 
 
+def _rest_get(target_org: str, path: str, timeout: int = 60):
+    """GET a REST path (e.g. '/sobjects') under /services/data/vXX.0 using the CLI's auth."""
+    import urllib.request
+    import urllib.error
+
+    info = _sf("org", "display", "--target-org", target_org).get("result", {})
+    instance_url = info.get("instanceUrl") or ""
+    api_version = info.get("apiVersion") or "59.0"
+
+    def _fetch():
+        tok = _sf("org", "auth", "show-access-token", "--target-org", target_org).get("result", {})
+        access_token = tok.get("accessToken") or tok.get("access_token")
+        if not access_token or not instance_url:
+            raise RuntimeError("Could not retrieve access token or instance URL")
+        req = urllib.request.Request(
+            f"{instance_url}/services/data/v{api_version}{path}",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        return _fetch()
+    except urllib.error.HTTPError as e:
+        if e.code != 401:
+            raise
+    # Expired access token: any CLI API call refreshes it (or raises SessionExpiredError)
+    _sf("data", "query", "--target-org", target_org, "--query", "SELECT Id FROM Organization LIMIT 1")
+    try:
+        return _fetch()
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise SessionExpiredError(target_org)
+        raise
+
+
 def list_objects(target_org):
     """Return sorted list of (api_name, label) tuples for all objects.
 
-    Uses EntityDefinition SOQL — works with all CLI versions.
-    EntityDefinition has a max SOQL limit; we page through with OFFSET.
+    Fast path: one REST describe-global call. Falls back to paging
+    EntityDefinition via the CLI (one process per 200 rows — slow on big orgs).
     """
+    try:
+        t0 = time.time()
+        data = _rest_get(target_org, "/sobjects")
+        pairs = {
+            o["name"]: (o.get("label") or o["name"]).strip()
+            for o in data.get("sobjects", [])
+            if o.get("name") and o.get("retrieveable", True)
+        }
+        _debug(f"list_objects: {len(pairs)} objects via REST ({time.time()-t0:.1f}s)")
+        if pairs:
+            return sorted(pairs.items(), key=lambda x: x[1])
+    except SessionExpiredError:
+        raise
+    except Exception as e:
+        _debug(f"list_objects: REST path failed ({e!r}), falling back to EntityDefinition paging")
+
     names = {}
     offset = 0
     batch  = 200   # EntityDefinition supports up to 200 per query

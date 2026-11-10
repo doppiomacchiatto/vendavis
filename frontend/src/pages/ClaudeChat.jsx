@@ -17,6 +17,9 @@ function OrgHealthCheck({ org, onClose }) {
   const [results,  setResults]  = useState({});
   const [current,  setCurrent]  = useState(null);  // { idx, label }
   const [done,     setDone]     = useState(false);
+  // Hooks must stay above the preflight early return (React error #310)
+  const [expanded,     setExpanded]     = useState({});   // { [id]: true }
+  const [drillRows,    setDrillRows]    = useState({});   // { [id]: rows[] | "loading" | "error" }
   const cancelRef = useRef(false);
 
   function startChecks() {
@@ -97,8 +100,6 @@ function OrgHealthCheck({ org, onClose }) {
   );
 
   // ── Running / results screen ───────────────────────────────────────────────
-  const [expanded,     setExpanded]     = useState({});   // { [id]: true }
-  const [drillRows,    setDrillRows]    = useState({});   // { [id]: rows[] | "loading" | "error" }
 
   async function loadDrill(chk) {
     if (!chk.drillQuery) return;
