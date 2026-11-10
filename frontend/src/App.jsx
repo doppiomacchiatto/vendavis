@@ -10,6 +10,7 @@ import OrgHealth from "./pages/OrgHealth";
 import { api } from "./api/client";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
 
 const TABS = [
   { id: "fls",      label: "FLS Explorer"       },
@@ -232,6 +233,13 @@ export default function App() {
               </div>
             </div>
           </div>
+          <button
+            onClick={() => openUrl(`http://localhost:${window.__SF_BACKEND_PORT__ || 7891}/docs`)}
+            className="text-sm bg-blue-600 hover:bg-blue-500 border border-blue-400 rounded px-3 py-1 transition-colors font-mono"
+            title="Open FastAPI Swagger docs in browser"
+          >
+            API
+          </button>
           <button
             onClick={() => { setSettingsSaved(""); setSettingsOpen(true); }}
             className="text-sm bg-blue-600 hover:bg-blue-500 border border-blue-400 rounded px-3 py-1 transition-colors"
