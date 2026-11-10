@@ -94,7 +94,12 @@ Windows support, the release build, error handling, the debug tooling and provid
 6. **Install the MSI** (per-machine, needs admin) — only NSIS was tried.
 7. **Code signing** for the Windows installers (SmartScreen warns on unsigned).
 8. **Optional:** UI progress count for long loads (SSE, as the export endpoint does).
-9. **Polish / cleanup:** collapse the OrgPicker debug log behind "Show details"; the `console.log` in `api/client.js` is still ungated (the in-memory debug log is always on, capped at 500 entries); delete `backend/claude_client.py` (tracked, unused); `npm audit` reports 2 vulnerabilities (1 moderate, 1 high) in `frontend/`; rename leftovers — `ClaudeChat.jsx` file/component name and a few comments still say "Claude" (user-facing text is already "OpenCode").
+9. **TODO — remove Claude-specific naming and code** (user-facing text is already "OpenCode"; what's left is internal). Inventory:
+   - **Frontend:** rename `frontend/src/pages/ClaudeChat.jsx` and its `ClaudeChat` component (e.g. `OpenCodeChat`); update the import and `<ClaudeChat>` usage in `App.jsx`; the tab id `"claude"` in `App.jsx` (`TABS` and the `activeTab` check); the "shared between OrgHealth tab and ClaudeChat" comment in `data/healthChecks.js`.
+   - **Switch the call sites to the active endpoint:** `SoqlRunner.jsx` (line ~66) and `ApexRunner.jsx` (line ~87) still POST to `/api/claude/chat`. Point them at `/api/ai/chat`, then remove the compat alias `/api/claude/chat` (`claude_chat_compat`) in `backend/main.py`. Don't remove the alias first.
+   - **`backend/claude_client.py`** is unused by the app, **but the legacy Tkinter app `sf_fls_exporter.py` imports it** (`from claude_client import …`). Deleting it breaks that file. Decide first: delete both, or leave the Tkinter app (and its ~100 `claude` identifiers) alone as the preserved reference. If `claude_client.py` goes, also drop the now-moot comment in `backend/sf_backend.spec` ("Legacy Anthropic client is kept in the repo…").
+   - **Keep, these are not cleanup:** the Anthropic provider preset and its `anthropic-version` header handling in `ai_client.py`; the `anthropic_compat` block in `opencode.config.json`; Claude model ids and labels in `AVAILABLE_MODELS`; `ANTHROPIC_API_KEY` as an env-var fallback for the key.
+10. **Other polish:** collapse the OrgPicker debug log behind "Show details"; the `console.log` in `api/client.js` is still ungated (the in-memory debug log is always on, capped at 500 entries); `npm audit` reports 2 vulnerabilities (1 moderate, 1 high) in `frontend/`.
 
 ---
 
