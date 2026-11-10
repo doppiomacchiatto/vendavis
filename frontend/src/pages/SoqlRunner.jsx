@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from "react";
 import { api, apiStream } from "../api/client";
 import Spinner from "../components/Spinner";
 import DebugLogPanel from "../components/DebugLogPanel";
+import LoadingOverlay from "../components/LoadingOverlay";
 
 const PAGE_SIZE = 50;
 
@@ -212,9 +213,13 @@ export default function SoqlRunner({ org, ctx, setCtx, loadObjects, onApiCall })
       .catch(() => {});
   }, []);
 
-  function handleLoadObjects() {
-    log(`Loading objects from ${org?.alias}…`);
-    loadObjects?.();
+  async function handleLoadObjects() {
+    log(`load_objects called for ${org?.alias}…`);
+    const r = await loadObjects?.();
+    if (!r) return;
+    if (r.status === "loaded")       log(`load_objects finished: ${r.count} objects in ${r.secs}s`, "success");
+    else if (r.status === "skipped") log(`load_objects skipped (${r.reason}, ${r.count} objects)`);
+    else if (r.status === "error")   log(`load_objects failed after ${r.secs}s: ${r.error}`, "error");
   }
 
   async function toggleExpand(obj) {
@@ -291,6 +296,7 @@ export default function SoqlRunner({ org, ctx, setCtx, loadObjects, onApiCall })
 
   return (
     <div className="flex h-full overflow-hidden">
+      {objLoading && <LoadingOverlay message={`Loading objects from ${org?.alias}…`} />}
 
       {/* ── Left: SObject browser ──────────────────────────────────────────── */}
       {sidebarOpen && (
