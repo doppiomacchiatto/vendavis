@@ -7,7 +7,9 @@ import SoqlRunner from "./pages/SoqlRunner";
 import ApexRunner from "./pages/ApexRunner";
 import ClaudeChat from "./pages/ClaudeChat";
 import OrgHealth from "./pages/OrgHealth";
+import DebugLogModal from "./components/DebugLogModal";
 import { api } from "./api/client";
+import { debugLog, useDebugLog } from "./debugLog";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -28,6 +30,8 @@ export default function App() {
   const [apiLimits,     setApiLimits]     = useState(null);   // {used, max}
   const [limitsError,   setLimitsError]   = useState("");
   const [limitsOpen,    setLimitsOpen]    = useState(false);
+  const [debugOpen,     setDebugOpen]     = useState(false);
+  const debugEntries = useDebugLog();
 
   // ── Quit confirm modal ─────────────────────────────────────────────────────
   const [quitConfirm,   setQuitConfirm]   = useState(false);
@@ -109,19 +113,29 @@ export default function App() {
   const loadObjects = useCallback(async () => {
     if (!activeOrg) return;
     // Guard: already loaded, already in-flight, or concurrent call
-    if (orgContext.objectsLoaded || orgContext.objectsLoading) return;
-    if (objectsFetchingRef.current) return;
+    if (orgContext.objectsLoaded || orgContext.objectsLoading || objectsFetchingRef.current) {
+      debugLog(`load_objects skipped for ${activeOrg.alias} (already ${orgContext.objectsLoaded ? "loaded" : "in flight"})`, "warn");
+      return;
+    }
     objectsFetchingRef.current = true;
     setOrgContext(ctx => ({ ...ctx, objectsLoading: true }));
+
+    const t0 = performance.now();
+    const secs = () => ((performance.now() - t0) / 1000).toFixed(1);
+    debugLog(`load_objects called for ${activeOrg.alias}`, "start");
+    const heartbeat = setInterval(() => debugLog(`load_objects still running… ${secs()}s`, "warn"), 10000);
 
     try {
       const d = await api(`/api/orgs/${activeOrg.alias}/objects`);
       const objs = d.objects || [];
       setOrgContext(ctx => ({ ...ctx, objects: objs, objectsLoaded: true, objectsLoading: false }));
+      debugLog(`load_objects finished for ${activeOrg.alias}: ${objs.length} objects in ${secs()}s`, "done");
     } catch (e) {
       setOrgContext(ctx => ({ ...ctx, objectsLoading: false }));
+      debugLog(`load_objects failed for ${activeOrg.alias} after ${secs()}s: ${e.message}`, "error");
       console.error("Failed to load objects:", e.message);
     } finally {
+      clearInterval(heartbeat);
       objectsFetchingRef.current = false;
     }
   }, [activeOrg, orgContext.objectsLoaded, orgContext.objectsLoading]);
@@ -145,6 +159,8 @@ export default function App() {
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Org picker modal */}
       {showOrgPicker && <OrgPickerModal onSelect={handleOrgSelect} />}
+
+      {debugOpen && <DebugLogModal onClose={() => setDebugOpen(false)} />}
 
       {/* Quit confirm modal */}
       {quitConfirm && (
@@ -232,6 +248,13 @@ export default function App() {
               </div>
             </div>
           </div>
+          <button
+            onClick={() => setDebugOpen(true)}
+            className="text-sm bg-blue-600 hover:bg-blue-500 border border-blue-400 rounded px-3 py-1 transition-colors"
+            title="Debug log"
+          >
+            🐞 Debug{debugEntries.length > 0 && ` (${debugEntries.length})`}
+          </button>
           <button
             onClick={() => { setSettingsSaved(""); setSettingsOpen(true); }}
             className="text-sm bg-blue-600 hover:bg-blue-500 border border-blue-400 rounded px-3 py-1 transition-colors"

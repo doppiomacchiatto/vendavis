@@ -4,6 +4,8 @@
  * Falls back to plain fetch for browser-only dev.
  */
 
+import { debugLog } from "../debugLog";
+
 let _invoke = null;
 
 async function getInvoke() {
@@ -16,6 +18,21 @@ async function getInvoke() {
 }
 
 export async function api(path, opts = {}) {
+  const method = (opts.method || "GET").toUpperCase();
+  const t0 = performance.now();
+  debugLog(`→ ${method} ${path}`, "start");
+  try {
+    const res = await apiRaw(path, opts);
+    debugLog(`← ${method} ${path} OK (${((performance.now() - t0) / 1000).toFixed(1)}s)`, "done");
+    return res;
+  } catch (e) {
+    const firstLine = String(e?.message || e).split("\n")[0];
+    debugLog(`← ${method} ${path} FAILED (${((performance.now() - t0) / 1000).toFixed(1)}s): ${firstLine}`, "error");
+    throw e;
+  }
+}
+
+async function apiRaw(path, opts = {}) {
   const method = (opts.method || "GET").toUpperCase();
   const invoke = await getInvoke();
 
