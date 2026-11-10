@@ -25,7 +25,7 @@ from sf_cli import (list_orgs, list_objects, describe_object, run_apex_anonymous
                     list_profiles, list_permission_sets,
                     get_fls_for_profile, get_object_perms_for_profile,
                     get_fls_for_permset, get_object_perms_for_permset,
-                    get_org_limits)
+                    get_org_limits, get_validation_rules, toggle_validation_rule)
 from sf_cli import _sf as _sf_raw   # for raw SOQL
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
@@ -209,6 +209,30 @@ def get_fields(alias: str, object_api: str):
         return {"fields": fields}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+@app.get("/api/orgs/{alias}/objects/{object_api}/validation-rules")
+def get_vr(alias: str, object_api: str):
+    try:
+        rules = get_validation_rules(alias, object_api)
+        return {"rules": rules}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+class ToggleVRRequest(BaseModel):
+    rule_name: str
+    active: bool
+
+
+@app.post("/api/orgs/{alias}/objects/{object_api}/validation-rules/toggle")
+def toggle_vr(alias: str, object_api: str, body: ToggleVRRequest):
+    try:
+        toggle_validation_rule(alias, object_api, body.rule_name, body.active)
+        return {"ok": True, "active": body.active}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
 
 # ---------------------------------------------------------------------------
 # Profiles & Permission Sets

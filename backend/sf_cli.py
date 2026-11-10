@@ -715,3 +715,115 @@ def _get_record_types_fallback(target_org, obj_name):
         return result
     except Exception:
         return []
+
+
+# ---------------------------------------------------------------------------
+# Validation Rules
+# ---------------------------------------------------------------------------
+
+def _get_auth(target_org: str):
+    """Return (instance_url, api_version, access_token) for direct REST calls."""
+    import urllib.request, urllib.error  # noqa: F401 (used by callers)
+    info   = _sf("org", "display", "--target-org", target_org)
+    result = info.get("result", {})
+    instance_url = result.get("instanceUrl") or result.get("instance_url") or ""
+    api_version  = result.get("apiVersion")  or result.get("api_version")  or "59.0"
+    token_info   = _sf("org", "auth", "show-access-token", "--target-org", target_org)
+    access_token = (token_info.get("result") or {}).get("accessToken") or \
+                   (token_info.get("result") or {}).get("access_token")
+    if not access_token or not instance_url:
+        raise RuntimeError("Could not retrieve access token or instance URL.")
+    return instance_url, api_version, access_token
+
+
+def get_validation_rules(target_org: str, object_api: str) -> list:
+    """Fetch all validation rules for an object via the Tooling API.
+
+    Returns a list of dicts:
+      { id, name, active, errorField, errorConditionFormula, errorMessage, description }
+    """
+    import urllib.request, urllib.error
+    instance_url, api_version, access_token = _get_auth(target_org)
+
+    import urllib.parse
+    soql = (
+        "SELECT Id, Active, ValidationName, ErrorDisplayField, "
+        "ErrorConditionFormula, ErrorMessage, Description "
+        f"FROM ValidationRule WHERE EntityDefinition.QualifiedApiName = '{object_api}' "
+        "ORDER BY ValidationName"
+    )
+    url = (
+        f"{instance_url}/services/data/v{api_version}/tooling/query"
+        f"?q={urllib.parse.quote(soql)}"
+    )
+    req = urllib.request.Request(
+        url,
+        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Tooling API error {e.code}: {e.read().decode()[:300]}")
+
+    rules = []
+    for r in data.get("records", []):
+        rules.append({
+            "id":                    r.get("Id", ""),
+            "name":                  r.get("ValidationName", ""),
+            "active":                r.get("Active", False),
+            "errorField":            r.get("ErrorDisplayField") or "",
+            "errorConditionFormula": r.get("ErrorConditionFormula") or "",
+            "errorMessage":          r.get("ErrorMessage") or "",
+            "description":           r.get("Description") or "",
+        })
+    return rules
+
+
+def toggle_validation_rule(target_org: str, object_api: str, rule_name: str, active: bool) -> None:
+    """Enable or disable a validation rule by deploying a minimal Metadata XML.
+
+    Uses a temp directory so that `sf project deploy start` has the required
+    sfdx-project.json and objects/ structure.
+    """
+    import shutil
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+
+        # sfdx-project.json — minimal, required for the deploy command
+        (tmp / "sfdx-project.json").write_text(json.dumps({
+            "packageDirectories": [{"path": "force-app", "default": True}],
+            "namespace": "",
+            "sourceApiVersion": "59.0",
+        }))
+
+        # force-app/main/default/objects/{Object}/validationRules/
+        vr_dir = tmp / "force-app" / "main" / "default" / "objects" / object_api / "validationRules"
+        vr_dir.mkdir(parents=True)
+
+        active_str = "true" if active else "false"
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">\n'
+            f'    <fullName>{rule_name}</fullName>\n'
+            f'    <active>{active_str}</active>\n'
+            f'    <errorConditionFormula>true</errorConditionFormula>\n'
+            f'    <errorMessage>placeholder</errorMessage>\n'
+            '</ValidationRule>\n'
+        )
+        (vr_dir / f"{rule_name}.validationRule-meta.xml").write_text(xml)
+
+        # Deploy — wait for completion (--wait 10 minutes max)
+        result = _sf(
+            "project", "deploy", "start",
+            "--source-dir", str(tmp / "force-app"),
+            "--target-org", target_org,
+            "--wait", "10",
+            timeout=660,
+        )
+        status = (result.get("result") or {}).get("status", "")
+        if status not in ("Succeeded", "SucceededPartial", ""):
+            errors = (result.get("result") or {}).get("details", {}).get("componentFailures", [])
+            msg = "; ".join(e.get("problem", "") for e in errors) if errors else str(result)
+            raise RuntimeError(f"Deploy failed ({status}): {msg}")

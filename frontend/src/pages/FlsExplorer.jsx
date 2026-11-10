@@ -20,6 +20,14 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
   const cancelRef = useRef(false);
   const [debugOpen,   setDebugOpen]   = useState(false);
   const [debugLog,    setDebugLog]    = useState([]);
+
+  // Validation Rules state
+  const [vrRules,       setVrRules]       = useState([]);
+  const [vrLoading,     setVrLoading]     = useState(false);
+  const [vrOpen,        setVrOpen]        = useState(false);
+  const [vrExpanded,    setVrExpanded]    = useState(null);  // rule name with expanded formula
+  const [vrConfirm,     setVrConfirm]     = useState(null);  // { rule, newActive }
+  const [vrToggling,    setVrToggling]    = useState(null);  // rule name being toggled
   const [fieldPage,   setFieldPage]   = useState(0);
   const FIELD_PAGE_SIZE = 20;
   const [fieldSort,   setFieldSort]   = useState({ col: "label", dir: "asc" });
@@ -67,6 +75,8 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
     if (!org || !obj) return;
     setLoadingFld(true);
     setFields([]);
+    setVrRules([]);
+    setVrOpen(false);
     log(`Loading fields for ${obj.label} (${obj.apiName})…`);
     try {
       const d = await api(`/api/orgs/${org.alias}/objects/${obj.apiName}/fields`);
@@ -79,6 +89,45 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
       log(e.message, "error");
     } finally {
       setLoadingFld(false);
+    }
+  }
+
+  // ── Validation Rules ─────────────────────────────────────────────────────────
+  async function loadValidationRules(obj) {
+    if (!org || !obj) return;
+    setVrLoading(true);
+    setVrRules([]);
+    log(`Loading validation rules for ${obj.label}…`);
+    try {
+      const d = await api(`/api/orgs/${org.alias}/objects/${obj.apiName}/validation-rules`);
+      setVrRules(d.rules || []);
+      log(`${(d.rules || []).length} validation rule(s) loaded for ${obj.label}`, "success");
+    } catch (e) {
+      log(`Validation rules error: ${e.message}`, "error");
+    } finally {
+      setVrLoading(false);
+    }
+  }
+
+  async function confirmToggleVR() {
+    if (!vrConfirm) return;
+    const { rule, newActive } = vrConfirm;
+    setVrConfirm(null);
+    setVrToggling(rule.name);
+    const action = newActive ? "Enabling" : "Disabling";
+    log(`${action} "${rule.name}"…`);
+    try {
+      await api(`/api/orgs/${org.alias}/objects/${selectedObj.apiName}/validation-rules/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rule_name: rule.name, active: newActive }),
+      });
+      setVrRules((prev) => prev.map((r) => r.name === rule.name ? { ...r, active: newActive } : r));
+      log(`"${rule.name}" ${newActive ? "enabled" : "disabled"}`, "success");
+    } catch (e) {
+      log(`Toggle failed: ${e.message}`, "error");
+    } finally {
+      setVrToggling(null);
     }
   }
 
@@ -353,6 +402,147 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
             )}
           </div>
         </div>
+
+        {/* ── Validation Rules panel — collapsible ─────────────────────────── */}
+        {fields.length > 0 && (
+          <div className="shrink-0 border-t border-gray-200 dark:border-gray-700">
+            {/* Header bar — always visible */}
+            <button
+              onClick={() => {
+                if (!vrOpen && vrRules.length === 0 && !vrLoading) loadValidationRules(selectedObj);
+                setVrOpen((o) => !o);
+              }}
+              className="w-full flex items-center justify-between px-4 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors select-none"
+            >
+              <span className="flex items-center gap-2">
+                <span>⚡ Validation Rules</span>
+                {vrRules.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+                    {vrRules.length}
+                  </span>
+                )}
+                {vrLoading && <span className="text-gray-400 italic">loading…</span>}
+              </span>
+              <span className="text-gray-400">{vrOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {/* Expanded body */}
+            {vrOpen && (
+              <div className="overflow-auto max-h-64 bg-white dark:bg-gray-900">
+                {vrRules.length === 0 && !vrLoading && (
+                  <p className="px-4 py-3 text-xs text-gray-400 italic">No validation rules found.</p>
+                )}
+                {vrRules.length > 0 && (
+                  <table className="w-full text-xs border-collapse">
+                    <thead className="sticky top-0 bg-gray-100 dark:bg-gray-700 text-left uppercase text-gray-500 tracking-wider">
+                      <tr>
+                        <th className="px-3 py-2 w-14 text-center">Active</th>
+                        <th className="px-3 py-2">Rule Name</th>
+                        <th className="px-3 py-2">Error Field</th>
+                        <th className="px-3 py-2">Error Message</th>
+                        <th className="px-3 py-2">Formula</th>
+                        <th className="px-3 py-2 w-20 text-center">Toggle</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vrRules.map((r, i) => (
+                        <tr key={r.name} className={i % 2 === 0 ? "bg-white dark:bg-gray-800" : "bg-gray-50 dark:bg-gray-800/60"}>
+                          {/* Active indicator */}
+                          <td className="px-3 py-2 text-center">
+                            <span className={`inline-block w-2.5 h-2.5 rounded-full ${r.active ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"}`} title={r.active ? "Active" : "Inactive"} />
+                          </td>
+                          {/* Rule name + description tooltip */}
+                          <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-100 max-w-[160px]">
+                            <span title={r.description || r.name} className="truncate block">{r.name}</span>
+                          </td>
+                          {/* Error field */}
+                          <td className="px-3 py-2 font-mono text-gray-500 dark:text-gray-400 max-w-[120px]">
+                            <span className="truncate block">{r.errorField || <span className="italic text-gray-300 dark:text-gray-600">Page</span>}</span>
+                          </td>
+                          {/* Error message */}
+                          <td className="px-3 py-2 text-gray-600 dark:text-gray-300 max-w-[200px]">
+                            <span className="truncate block" title={r.errorMessage}>{r.errorMessage}</span>
+                          </td>
+                          {/* Formula — click to expand */}
+                          <td className="px-3 py-2 max-w-[200px]">
+                            {r.errorConditionFormula ? (
+                              <button
+                                onClick={() => setVrExpanded((prev) => prev === r.name ? null : r.name)}
+                                className="text-left font-mono text-blue-600 dark:text-blue-400 hover:underline w-full"
+                              >
+                                {vrExpanded === r.name
+                                  ? <span className="whitespace-pre-wrap break-all block">{r.errorConditionFormula}</span>
+                                  : <span className="truncate block">{r.errorConditionFormula}</span>
+                                }
+                              </button>
+                            ) : <span className="text-gray-300 dark:text-gray-600 italic">—</span>}
+                          </td>
+                          {/* Toggle button */}
+                          <td className="px-3 py-2 text-center">
+                            {vrToggling === r.name
+                              ? <span className="text-gray-400 italic">…</span>
+                              : (
+                                <button
+                                  onClick={() => setVrConfirm({ rule: r, newActive: !r.active })}
+                                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                    r.active
+                                      ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
+                                      : "bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50"
+                                  }`}
+                                >
+                                  {r.active ? "Disable" : "Enable"}
+                                </button>
+                              )
+                            }
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── VR Toggle confirm dialog ──────────────────────────────────────── */}
+        {vrConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-5">
+              <div>
+                <p className="font-semibold text-gray-900 dark:text-white text-base">
+                  {vrConfirm.newActive ? "Enable" : "Disable"} Validation Rule?
+                </p>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                  <span className="font-mono font-medium">{vrConfirm.rule.name}</span>
+                  {" "}on <span className="font-medium">{selectedObj?.label}</span> in{" "}
+                  <span className="font-medium">{org?.alias}</span>
+                </p>
+                {!vrConfirm.newActive && (
+                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                    Disabling a validation rule affects all users in the org immediately.
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setVrConfirm(null)}
+                  className="px-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmToggleVR}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg text-white transition-colors ${
+                    vrConfirm.newActive ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"
+                  }`}
+                >
+                  {vrConfirm.newActive ? "Enable" : "Disable"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Debug log — collapsible ───────────────────────────────────────── */}
         <DebugLogPanel
