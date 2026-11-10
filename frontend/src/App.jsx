@@ -111,11 +111,12 @@ export default function App() {
   const objectsFetchingRef = useRef(false);
 
   const loadObjects = useCallback(async () => {
-    if (!activeOrg) return;
+    if (!activeOrg) return { status: "no_org" };
     // Guard: already loaded, already in-flight, or concurrent call
     if (orgContext.objectsLoaded || orgContext.objectsLoading || objectsFetchingRef.current) {
-      debugLog(`load_objects skipped for ${activeOrg.alias} (already ${orgContext.objectsLoaded ? "loaded" : "in flight"})`, "warn");
-      return;
+      const reason = orgContext.objectsLoaded ? "already loaded" : "already in flight";
+      debugLog(`load_objects skipped for ${activeOrg.alias} (${reason})`, "warn");
+      return { status: "skipped", reason, count: orgContext.objects.length };
     }
     objectsFetchingRef.current = true;
     setOrgContext(ctx => ({ ...ctx, objectsLoading: true }));
@@ -130,10 +131,12 @@ export default function App() {
       const objs = d.objects || [];
       setOrgContext(ctx => ({ ...ctx, objects: objs, objectsLoaded: true, objectsLoading: false }));
       debugLog(`load_objects finished for ${activeOrg.alias}: ${objs.length} objects in ${secs()}s`, "done");
+      return { status: "loaded", count: objs.length, secs: secs() };
     } catch (e) {
       setOrgContext(ctx => ({ ...ctx, objectsLoading: false }));
       debugLog(`load_objects failed for ${activeOrg.alias} after ${secs()}s: ${e.message}`, "error");
       console.error("Failed to load objects:", e.message);
+      return { status: "error", error: e.message, secs: secs() };
     } finally {
       clearInterval(heartbeat);
       objectsFetchingRef.current = false;

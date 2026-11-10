@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { api } from "../api/client";
 import Spinner from "../components/Spinner";
+import DebugLogPanel from "../components/DebugLogPanel";
 import LoadingOverlay from "../components/LoadingOverlay";
 
 const FIELD_PAGE_SIZE = 30;
@@ -76,10 +77,14 @@ export default function ProfilesExplorer({ org, ctx, setCtx, loadObjects: loadOb
   }
 
   // ── Load Objects — delegates to shared App.jsx loader ──────────────────────
-  function loadObjects() {
+  async function loadObjects() {
     if (!org) return;
-    log(`Loading objects…`);
-    loadObjectsShared?.();
+    log(`load_objects called for ${org.alias}…`);
+    const r = await loadObjectsShared?.();
+    if (!r) return;
+    if (r.status === "loaded")       log(`load_objects finished: ${r.count} objects in ${r.secs}s`, "success");
+    else if (r.status === "skipped") log(`load_objects skipped (${r.reason}, ${r.count} objects)`);
+    else if (r.status === "error")   log(`load_objects failed after ${r.secs}s: ${r.error}`, "error");
   }
 
   function toggleCheck(apiName) {
@@ -632,29 +637,13 @@ export default function ProfilesExplorer({ org, ctx, setCtx, loadObjects: loadOb
         </div>
 
         {/* ── Debug log ─────────────────────────────────────────────────────── */}
-        <div className={`border-t-2 border-gray-300 dark:border-gray-600 flex flex-col ${debugOpen ? "h-1/4" : "h-auto"}`}>
-          <button
-            onClick={() => setDebugOpen((o) => !o)}
-            className="flex items-center justify-between px-4 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-xs font-mono font-semibold text-gray-600 dark:text-gray-300 transition-colors w-full text-left"
-          >
-            <span>🔍 Debug Log {debugLog.length > 0 && `(${debugLog.length})`}</span>
-            <span className="text-gray-400">{debugOpen ? "▼ collapse" : "▲ expand"}</span>
-          </button>
-          {debugOpen && (
-            <div className="flex-1 overflow-y-auto bg-gray-900 px-3 py-2 font-mono text-xs">
-              {debugLog.length === 0
-                ? <span className="text-gray-500">No log entries yet.</span>
-                : debugLog.map((e, i) => (
-                  <div key={i} className="flex gap-2 leading-5">
-                    <span className="text-gray-500 shrink-0">{e.ts}</span>
-                    <span className="shrink-0">{e.icon}</span>
-                    <span className="text-green-300 break-all">{e.msg}</span>
-                  </div>
-                ))
-              }
-            </div>
-          )}
-        </div>
+        <DebugLogPanel
+          entries={debugLog}
+          open={debugOpen}
+          onToggle={() => setDebugOpen((o) => !o)}
+          onClear={() => setDebugLog([])}
+          heightClass="h-1/4"
+        />
       </div>
     </div>
   );
