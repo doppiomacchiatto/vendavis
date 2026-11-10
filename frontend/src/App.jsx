@@ -11,6 +11,7 @@ import { api } from "./api/client";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import DebugLogModal from "./components/DebugLogModal";
 
 const TABS = [
   { id: "fls",      label: "FLS Explorer"       },
@@ -59,6 +60,9 @@ export default function App() {
   function handleQuitNo() {
     setQuitConfirm(false);
   }
+
+  // ── Debug log modal ────────────────────────────────────────────────────────
+  const [debugOpen, setDebugOpen] = useState(false);
 
   // ── Settings modal ─────────────────────────────────────────────────────────
   const [aboutOpen,     setAboutOpen]     = useState(false);
@@ -146,6 +150,9 @@ export default function App() {
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Org picker modal */}
       {showOrgPicker && <OrgPickerModal onSelect={handleOrgSelect} />}
+
+      {/* Debug log modal */}
+      {debugOpen && <DebugLogModal onClose={() => setDebugOpen(false)} />}
 
       {/* Quit confirm modal */}
       {quitConfirm && (
@@ -239,6 +246,13 @@ export default function App() {
             title="Open FastAPI Swagger docs in browser"
           >
             API
+          </button>
+          <button
+            onClick={() => setDebugOpen(true)}
+            className="text-sm bg-blue-600 hover:bg-blue-500 border border-blue-400 rounded px-3 py-1 transition-colors"
+            title="Debug log"
+          >
+            🐞
           </button>
           <button
             onClick={() => { setSettingsSaved(""); setSettingsOpen(true); }}
