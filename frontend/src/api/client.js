@@ -19,8 +19,6 @@ export async function api(path, opts = {}) {
   const method = (opts.method || "GET").toUpperCase();
   const invoke = await getInvoke();
 
-  console.log(`[api] ${method} ${path}${invoke ? " (via Tauri IPC)" : " (via fetch)"}`);
-
   // ── Tauri path: proxy through Rust commands (no CSP) ──────────────────────
   if (invoke) {
     try {

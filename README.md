@@ -1,4 +1,4 @@
-# SF Metadata Explorer v2 — Tauri + React + FastAPI
+# Vendavis v1.0.1 Beta — Salesforce Metadata Explorer
 
 Cross-platform desktop app (macOS · Windows · Linux).
 
@@ -12,7 +12,8 @@ sf-metadata-exp-electron/
 │   ├── platform_env.py   # OS-specific PATH & tool-discovery abstraction
 │   ├── excel_builder.py
 │   ├── query_history.py
-│   └── claude_client.py  # Claude AI client (Anthropic SDK)
+│   ├── claude_client.py  # Claude AI client (Anthropic SDK)
+│   └── sf_backend.spec   # PyInstaller spec — build with: pyinstaller sf_backend.spec
 ├── src-tauri/
 │   ├── src/main.rs       # Tauri shell — spawns backend binary, creates window
 │   └── tauri.conf.json

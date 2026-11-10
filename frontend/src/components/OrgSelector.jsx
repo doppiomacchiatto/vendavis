@@ -9,7 +9,7 @@ export default function OrgSelector({ value, onChange }) {
     setLoading(true);
     api("/api/orgs")
       .then((d) => setOrgs(d.orgs || []))
-      .catch(console.error)
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

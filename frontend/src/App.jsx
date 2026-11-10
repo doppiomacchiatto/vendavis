@@ -63,6 +63,16 @@ export default function App() {
   // ── Debug log modal ────────────────────────────────────────────────────────
   const [debugOpen, setDebugOpen] = useState(false);
 
+  // ── App version (read from Tauri at startup) ───────────────────────────────
+  const [appVersion, setAppVersion] = useState("1.0.1");
+  useEffect(() => {
+    if (window.__TAURI__) {
+      import("@tauri-apps/api/app").then(({ getVersion }) =>
+        getVersion().then(setAppVersion).catch(() => {})
+      ).catch(() => {});
+    }
+  }, []);
+
   // ── Settings modal ─────────────────────────────────────────────────────────
   const [aboutOpen,     setAboutOpen]     = useState(false);
   const [helpTab,       setHelpTab]       = useState("about"); // "about" | "requirements"
@@ -128,7 +138,7 @@ export default function App() {
     } catch (e) {
       const secs = ((Date.now() - t0) / 1000).toFixed(1);
       setOrgContext(ctx => ({ ...ctx, objectsLoading: false }));
-      console.error("Failed to load objects:", e.message);
+      // error surfaced to caller via return value
       return { status: "error", error: e.message, secs };
     } finally {
       objectsFetchingRef.current = false;
@@ -360,7 +370,7 @@ export default function App() {
                       "The bird that reveals what's hidden" — a scout that sees what others can't, bringing hidden structure into the light.
                     </p>
                   </div>
-                  <span className="shrink-0 text-xs font-mono text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded self-start">v2.0.0</span>
+                  <span className="shrink-0 text-xs font-mono text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded self-start">v{appVersion} Beta</span>
                 </div>
                 <p className="leading-relaxed">
                   An unofficial Salesforce metadata explorer — built for teams who need to understand exactly what their org allows and why, without spending hours in Setup.

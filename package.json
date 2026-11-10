@@ -1,7 +1,7 @@
 {
   "name": "sf-metadata-explorer",
-  "version": "2.0.0",
-  "description": "Salesforce Metadata Explorer — Tauri + React + FastAPI",
+  "version": "1.0.1",
+  "description": "Vendavis — Salesforce Metadata Explorer (Tauri + React + FastAPI)",
   "scripts": {
     "dev":            "concurrently \"npm run dev:backend\" \"npm run tauri:dev\"",
     "dev:frontend":   "cd frontend && npm run dev",
