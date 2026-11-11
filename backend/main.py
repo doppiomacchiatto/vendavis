@@ -161,6 +161,10 @@ def get_fields(alias: str, object_api: str):
                         f.get("nameField", False)
                     )
                 ),
+                # DEBUG — remove once required logic is verified
+                "_nameField":   f.get("nameField"),
+                "_nillable":    f.get("nillable"),
+                "_createable":  f.get("createable"),
             }
             for f in raw_fields
         ]
