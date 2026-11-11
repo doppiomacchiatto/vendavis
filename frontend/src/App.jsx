@@ -69,26 +69,30 @@ export default function App() {
   // ── Debug log modal ────────────────────────────────────────────────────────
   const [debugOpen, setDebugOpen] = useState(false);
 
-  // ── Restart backend ────────────────────────────────────────────────────────
-  const [restarting, setRestarting] = useState(false); // "idle" | true
-  const [restartMsg, setRestartMsg] = useState(null);  // null | { ok, text }
+  // ── Restart backend modal ──────────────────────────────────────────────────
+  // phase: "idle" | "restarting" | "done" | "error"
+  const [restartPhase, setRestartPhase] = useState("idle");
+  const [restartError, setRestartError] = useState(null);
 
   async function handleRestartBackend() {
-    setRestarting(true);
-    setRestartMsg(null);
+    setRestartPhase("restarting");
+    setRestartError(null);
     try {
       await invoke("restart_backend");
-      setRestartMsg({ ok: true, text: "Backend is back online. All features are ready to use." });
+      setRestartPhase("done");
     } catch (e) {
       const raw = String(e);
       const friendly = raw.includes("15 seconds")
-        ? "Backend did not come back online in time. Try restarting the app if the issue persists."
+        ? "Backend did not come back online in time. Try quitting and relaunching the app."
         : `Could not restart backend: ${raw}`;
-      setRestartMsg({ ok: false, text: friendly });
-    } finally {
-      setRestarting(false);
-      setTimeout(() => setRestartMsg(null), 6000);
+      setRestartError(friendly);
+      setRestartPhase("error");
     }
+  }
+
+  function closeRestartModal() {
+    setRestartPhase("idle");
+    setRestartError(null);
   }
 
   // ── App version (read from Tauri at startup) ───────────────────────────────
@@ -301,12 +305,11 @@ export default function App() {
           {/* Restart backend */}
           <button
             onClick={handleRestartBackend}
-            disabled={restarting}
+            disabled={restartPhase === "restarting"}
             title="Restart the Python backend service"
-            className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 border border-blue-400 rounded px-3 py-1 transition-colors flex items-center gap-1.5"
+            className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 border border-blue-400 rounded px-3 py-1 transition-colors"
           >
-            <span className={restarting ? "animate-spin inline-block" : ""}>↺</span>
-            <span>{restarting ? "Restarting…" : "Restart Backend"}</span>
+            Restart Backend
           </button>
           <button
             onClick={() => setDebugOpen(true)}
@@ -325,18 +328,61 @@ export default function App() {
         </div>
       </header>
 
-      {/* Restart backend toast */}
-      {restartMsg && (
-        <div className={`fixed bottom-5 right-5 z-50 max-w-sm flex flex-col gap-1 px-4 py-3 rounded-xl shadow-2xl border text-sm transition-all ${
-          restartMsg.ok
-            ? "bg-green-900/95 border-green-600 text-green-100"
-            : "bg-red-900/95 border-red-600 text-red-100"
-        }`}>
-          <div className="flex items-center gap-2 font-semibold">
-            <span>{restartMsg.ok ? "✅" : "❌"}</span>
-            <span>{restartMsg.ok ? "Backend restarted successfully" : "Restart failed"}</span>
+      {/* Restart backend modal */}
+      {restartPhase !== "idle" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={restartPhase !== "restarting" ? closeRestartModal : undefined} />
+          <div className="relative w-full max-w-sm rounded-2xl border border-slate-600/60 bg-slate-900 shadow-2xl overflow-hidden">
+
+            {/* Header */}
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-700/60 bg-[#1a2d5a]">
+              <span className="text-xl">⚙️</span>
+              <p className="text-sm font-semibold text-white">Restart Backend</p>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-6 flex flex-col items-center gap-4 text-center">
+              {restartPhase === "restarting" && (
+                <>
+                  <div className="w-12 h-12 rounded-full border-4 border-blue-500/30 border-t-blue-400 animate-spin" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">Restarting backend…</p>
+                    <p className="text-xs text-slate-400 mt-1">Waiting for the service to come back online.</p>
+                  </div>
+                </>
+              )}
+              {restartPhase === "done" && (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center text-2xl">✅</div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Backend restarted</p>
+                    <p className="text-xs text-slate-400 mt-1">The service is back online. All features are ready to use.</p>
+                  </div>
+                </>
+              )}
+              {restartPhase === "error" && (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center text-2xl">❌</div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Restart failed</p>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">{restartError}</p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            {restartPhase !== "restarting" && (
+              <div className="px-6 py-4 border-t border-slate-700/60 flex justify-end">
+                <button
+                  onClick={closeRestartModal}
+                  className="px-5 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
           </div>
-          <p className="text-xs opacity-80 leading-relaxed">{restartMsg.text}</p>
         </div>
       )}
 
