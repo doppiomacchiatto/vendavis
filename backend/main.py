@@ -23,7 +23,7 @@ from sf_cli import (list_orgs, list_objects, describe_object, run_apex_anonymous
                     get_fls_for_profile, get_object_perms_for_profile,
                     get_fls_for_permset, get_object_perms_for_permset,
                     get_org_limits, get_validation_rules, toggle_validation_rule,
-                    sf_rest_request)
+                    sf_rest_request, get_security_settings)
 from sf_cli import _sf as _sf_raw   # for raw SOQL
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
@@ -198,6 +198,15 @@ def rest_proxy(alias: str, req: RestProxyRequest):
     try:
         result = sf_rest_request(alias, req.method, req.path, req.body)
         return result
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/orgs/{alias}/security-settings")
+def security_settings(alias: str):
+    """Retrieve SecuritySettings + NetworkAccess metadata and return parsed dict."""
+    try:
+        return get_security_settings(alias)
     except Exception as e:
         raise HTTPException(500, str(e))
 

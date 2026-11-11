@@ -136,6 +136,124 @@ export const HEALTH_CHECKS = [
     },
   },
 
+  // ── Security Settings (Metadata) ───────────────────────────────────────────
+  {
+    id: "ip_ranges", label: "IP Allowlisting (Network Access)", category: "Security",
+    tip: "Restricting logins to known IP ranges (Setup → Security → Network Access) is one of the most effective controls for preventing unauthorized access. Without IP ranges, any credential compromise can be exploited from anywhere. Add your office/VPN CIDRs to reduce your attack surface.",
+    drillQuery: null,
+    async run(alias, _api) {
+      const d = await _api(`/api/orgs/${alias}/security-settings`);
+      const ranges = d.ipRanges ?? [];
+      if (ranges.length === 0) return { status: "warn", detail: "No IP allowlist ranges configured — logins allowed from any IP" };
+      const rows = ranges.map(r => ({
+        "Start IP": r.start ?? "",
+        "End IP":   r.end ?? "",
+        "Description": r.description ?? "",
+      }));
+      return { status: "pass", detail: `${ranges.length} IP range(s) configured`, rows };
+    },
+  },
+  {
+    id: "require_https", label: "Require HTTPS (TLS)", category: "Security",
+    tip: "Salesforce enforces TLS on all connections, but the requireHttps session setting should still be true to prevent any HTTP downgrade attempts. Verify in Setup → Session Settings → Require secure connections (HTTPS).",
+    drillQuery: null,
+    async run(alias, _api) {
+      const d = await _api(`/api/orgs/${alias}/security-settings`);
+      const val = d.sessionSettings?.requireHttps;
+      if (val === "false") return { status: "fail", detail: "requireHttps is disabled — org allows non-HTTPS sessions" };
+      return { status: "pass", detail: "HTTPS required for all sessions" };
+    },
+  },
+  {
+    id: "session_timeout", label: "Session Timeout Policy", category: "Security",
+    tip: "Long or unlimited session timeouts increase the risk of session hijacking from unattended workstations. Best practice is ≤ 2 hours for internal users. Configure in Setup → Session Settings → Timeout Value.",
+    drillQuery: null,
+    async run(alias, _api) {
+      const d = await _api(`/api/orgs/${alias}/security-settings`);
+      const timeout = d.sessionSettings?.sessionTimeout;
+      if (!timeout) return { status: "info", detail: "Session timeout value not available" };
+      // Values: TwentyMinutes, ThirtyMinutes, OneHour, TwoHours, FourHours, EightHours, TwelveHours, TwentyFourHours
+      const longTimeouts = ["TwelveHours", "TwentyFourHours"];
+      const medTimeouts  = ["FourHours", "EightHours"];
+      if (longTimeouts.includes(timeout)) return { status: "warn", detail: `Session timeout set to ${timeout} — consider reducing to 2h or less` };
+      if (medTimeouts.includes(timeout))  return { status: "warn", detail: `Session timeout set to ${timeout}` };
+      return { status: "pass", detail: `Session timeout: ${timeout}` };
+    },
+  },
+  {
+    id: "password_min_length", label: "Password Minimum Length", category: "Security",
+    tip: "NIST SP 800-63B recommends at least 8 characters, and most orgs should target 12+. Configure in Setup → Password Policies. Pair with MFA for best protection.",
+    drillQuery: null,
+    async run(alias, _api) {
+      const d = await _api(`/api/orgs/${alias}/security-settings`);
+      const len = parseInt(d.passwordPolicies?.minimumPasswordLength ?? "0", 10);
+      if (!len) return { status: "info", detail: "Password minimum length not available" };
+      if (len < 8)  return { status: "fail", detail: `Minimum password length is ${len} — below NIST minimum of 8` };
+      if (len < 12) return { status: "warn", detail: `Minimum password length is ${len} — consider 12+ for stronger security` };
+      return { status: "pass", detail: `Minimum password length: ${len} characters` };
+    },
+  },
+  {
+    id: "password_complexity", label: "Password Complexity", category: "Security",
+    tip: "Password complexity enforcement prevents trivially guessable passwords. Set at least 'AlphaNumeric' in Setup → Password Policies. 'SpecialCharacters' provides the strongest baseline.",
+    drillQuery: null,
+    async run(alias, _api) {
+      const d = await _api(`/api/orgs/${alias}/security-settings`);
+      const complexity = d.passwordPolicies?.complexity;
+      if (!complexity) return { status: "info", detail: "Password complexity not available" };
+      if (complexity === "NoRestriction") return { status: "fail", detail: "Password complexity set to NoRestriction — any password is accepted" };
+      return { status: "pass", detail: `Password complexity: ${complexity}` };
+    },
+  },
+  {
+    id: "password_expiry", label: "Password Expiration Policy", category: "Security",
+    tip: "Passwords that never expire can remain compromised indefinitely. Configure expiration in Setup → Password Policies. 90–180 day rotation is a common enterprise baseline; pair with MFA to reduce rotation pressure.",
+    drillQuery: null,
+    async run(alias, _api) {
+      const d = await _api(`/api/orgs/${alias}/security-settings`);
+      const expiry = d.passwordPolicies?.expiration;
+      if (!expiry) return { status: "info", detail: "Password expiration not available" };
+      if (expiry === "Never") return { status: "warn", detail: "Passwords never expire — consider setting a rotation policy" };
+      return { status: "pass", detail: `Password expiration: ${expiry}` };
+    },
+  },
+  {
+    id: "max_login_attempts", label: "Login Lockout Threshold", category: "Security",
+    tip: "No lockout (or 10+ attempts) makes brute-force attacks easier. Set max login attempts to 5 or fewer in Setup → Password Policies → Maximum Invalid Login Attempts. Combine with IP allowlisting for defense-in-depth.",
+    drillQuery: null,
+    async run(alias, _api) {
+      const d = await _api(`/api/orgs/${alias}/security-settings`);
+      const attempts = d.passwordPolicies?.maxLoginAttempts;
+      if (!attempts) return { status: "info", detail: "Login lockout setting not available" };
+      if (["NoLimit", "TenOrMore"].includes(attempts)) return { status: "warn", detail: `Max login attempts: ${attempts} — consider tightening to 5 or fewer` };
+      return { status: "pass", detail: `Max login attempts before lockout: ${attempts}` };
+    },
+  },
+  {
+    id: "enforce_ip_ranges_every_request", label: "Enforce IP Ranges Per Request", category: "Security",
+    tip: "By default, IP ranges are only checked at login — a session started inside a trusted IP can continue from an untrusted one. Enable 'Enforce login IP ranges on every request' in Setup → Session Settings to check IP on every API call.",
+    drillQuery: null,
+    async run(alias, _api) {
+      const d = await _api(`/api/orgs/${alias}/security-settings`);
+      const ranges = d.ipRanges ?? [];
+      const enforce = d.sessionSettings?.enforceIpRangesEveryRequest;
+      if (ranges.length === 0) return { status: "info", detail: "No IP ranges configured — this setting has no effect" };
+      if (enforce === "false") return { status: "warn", detail: "IP ranges are configured but not enforced on every request" };
+      return { status: "pass", detail: "IP ranges enforced on every request" };
+    },
+  },
+  {
+    id: "admin_login_as", label: "Admins Can Log In As Any User", category: "Security",
+    tip: "When enabled, System Admins can log in as any user without knowing their password. This is convenient for troubleshooting but is a significant privilege. Disable in Setup → Security → Login Access Policies unless actively needed, and monitor usage via Setup Audit Trail.",
+    drillQuery: null,
+    async run(alias, _api) {
+      const d = await _api(`/api/orgs/${alias}/security-settings`);
+      const val = d.loginAccessPolicies?.administratorsCanLogInAsAny;
+      if (val === "true") return { status: "warn", detail: "Admins can log in as any user — monitor and disable if not required" };
+      return { status: "pass", detail: "Admin login-as is disabled" };
+    },
+  },
+
   // ── Audit & Changes ────────────────────────────────────────────────────────
   {
     id: "setup_audit_24h", label: "Setup Changes (Last 24h)", category: "Audit & Changes",

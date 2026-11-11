@@ -744,3 +744,109 @@ def sf_rest_request(target_org: str, method: str, path: str, body: str = None) -
         parsed = raw  # return raw string if not JSON
 
     return {"status": status, "headers": headers, "body": parsed}
+
+
+# ---------------------------------------------------------------------------
+# Security Settings (Metadata API retrieve)
+# ---------------------------------------------------------------------------
+
+def get_security_settings(target_org: str) -> dict:
+    """Retrieve SecuritySettings and NetworkAccess metadata and parse into a dict.
+
+    Returns:
+    {
+      "passwordPolicies": { minimumPasswordLength, complexity, expiration,
+                            maxLoginAttempts, lockoutInterval,
+                            minimumPasswordLifetime, obscure },
+      "sessionSettings":  { sessionTimeout, forceRelogin, requireHttps,
+                            clickjackProtectionHeader, enforceIpRangesEveryRequest,
+                            lockSessionsToDomain },
+      "loginAccessPolicies": { administratorsCanLogInAsAny },
+      "ipRanges": [ { start, end, description }, … ]   # from NetworkAccess
+    }
+    """
+    import xml.etree.ElementTree as ET
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+
+        # Minimal sfdx-project.json
+        (tmp / "sfdx-project.json").write_text(json.dumps({
+            "packageDirectories": [{"path": "force-app", "default": True}],
+            "namespace": "",
+            "sourceApiVersion": "68.0",
+        }))
+        output_dir = tmp / "force-app"
+        output_dir.mkdir()
+
+        # Retrieve both metadata types
+        _sf(
+            "project", "retrieve", "start",
+            "--metadata", "SecuritySettings",
+            "--metadata", "NetworkAccess",
+            "--target-org", target_org,
+            "--output-dir", str(output_dir),
+            "--wait", "5",
+            timeout=360,
+        )
+
+        result = {
+            "passwordPolicies":    {},
+            "sessionSettings":     {},
+            "loginAccessPolicies": {},
+            "ipRanges":            [],
+        }
+
+        # Parse SecuritySettings XML
+        ss_files = list(output_dir.rglob("*SecuritySettings*settings-meta.xml"))
+        if not ss_files:
+            ss_files = list(output_dir.rglob("*.settings-meta.xml"))
+            ss_files = [f for f in ss_files if "Security" in f.name]
+        if ss_files:
+            tree = ET.parse(ss_files[0])
+            root = tree.getroot()
+            ns   = root.tag.split("}")[0].lstrip("{") if "}" in root.tag else ""
+            def tag(name): return f"{{{ns}}}{name}" if ns else name
+
+            pp = root.find(tag("passwordPolicies"))
+            if pp is not None:
+                for field in ["minimumPasswordLength", "complexity", "expiration",
+                              "maxLoginAttempts", "lockoutInterval",
+                              "minimumPasswordLifetime", "obscure"]:
+                    el = pp.find(tag(field))
+                    if el is not None:
+                        result["passwordPolicies"][field] = el.text
+
+            ss = root.find(tag("sessionSettings"))
+            if ss is not None:
+                for field in ["sessionTimeout", "forceRelogin", "requireHttps",
+                              "clickjackProtectionHeader", "enforceIpRangesEveryRequest",
+                              "lockSessionsToDomain"]:
+                    el = ss.find(tag(field))
+                    if el is not None:
+                        result["sessionSettings"][field] = el.text
+
+            lap = root.find(tag("loginAccessPolicies"))
+            if lap is not None:
+                el = lap.find(tag("administratorsCanLogInAsAny"))
+                if el is not None:
+                    result["loginAccessPolicies"]["administratorsCanLogInAsAny"] = el.text
+
+        # Parse NetworkAccess XML
+        na_files = list(output_dir.rglob("*NetworkAccess*"))
+        if na_files:
+            tree = ET.parse(na_files[0])
+            root = tree.getroot()
+            ns   = root.tag.split("}")[0].lstrip("{") if "}" in root.tag else ""
+            def tag(name): return f"{{{ns}}}{name}" if ns else name  # noqa: F811
+
+            for ipr in root.findall(tag("ipRanges")):
+                entry = {}
+                for field in ["start", "end", "description"]:
+                    el = ipr.find(tag(field))
+                    if el is not None:
+                        entry[field] = el.text
+                if entry:
+                    result["ipRanges"].append(entry)
+
+        return result
