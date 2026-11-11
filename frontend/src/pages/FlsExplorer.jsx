@@ -28,6 +28,8 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
   const [vrExpanded,    setVrExpanded]    = useState(null);  // rule name with expanded formula
   const [vrConfirm,     setVrConfirm]     = useState(null);  // { rule, newActive }
   const [vrToggling,    setVrToggling]    = useState(null);  // rule name being toggled
+  const [vrBulkBusy,   setVrBulkBusy]   = useState(false); // bulk op in progress
+  const [vrSnapshot,   setVrSnapshot]    = useState(null);  // names active before bulk-disable
   const [fieldPage,   setFieldPage]   = useState(0);
   const FIELD_PAGE_SIZE = 20;
   const [fieldSort,   setFieldSort]   = useState({ col: "label", dir: "asc" });
@@ -129,6 +131,45 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
     } finally {
       setVrToggling(null);
     }
+  }
+
+  // ── Bulk VR toggle ───────────────────────────────────────────────────────────
+  async function bulkToggleVR(targetActive) {
+    const toToggle = targetActive
+      ? vrRules.filter(r => !r.active && vrSnapshot?.includes(r.name))  // restore snapshot
+      : vrRules.filter(r => r.active);                                   // disable all active
+
+    if (toToggle.length === 0) return;
+
+    // Save snapshot before disabling so restore is exact
+    if (!targetActive) setVrSnapshot(vrRules.filter(r => r.active).map(r => r.name));
+
+    setVrBulkBusy(true);
+    const action = targetActive ? "Enabling" : "Disabling";
+    log(`${action} ${toToggle.length} validation rule(s) on ${selectedObj.label}…`);
+
+    let failed = 0;
+    for (const rule of toToggle) {
+      setVrToggling(rule.name);
+      try {
+        await api(`/api/orgs/${org.alias}/objects/${selectedObj.apiName}/validation-rules/toggle`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rule_name: rule.name, active: targetActive }),
+        });
+        setVrRules(prev => prev.map(r => r.name === rule.name ? { ...r, active: targetActive } : r));
+        log(`"${rule.name}" ${targetActive ? "enabled" : "disabled"}`, "success");
+      } catch (e) {
+        log(`"${rule.name}" failed: ${e.message}`, "error");
+        failed++;
+      }
+    }
+
+    setVrToggling(null);
+    setVrBulkBusy(false);
+    if (targetActive) setVrSnapshot(null);  // clear snapshot after restore
+    const ok = toToggle.length - failed;
+    log(`Bulk ${targetActive ? "enable" : "disable"} complete — ${ok}/${toToggle.length} succeeded`, failed ? "error" : "success");
   }
 
   // ── Export ──────────────────────────────────────────────────────────────────
@@ -407,14 +448,16 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
         {fields.length > 0 && (
           <div className="shrink-0 border-t border-gray-200 dark:border-gray-700">
             {/* Header bar — always visible */}
-            <button
-              onClick={() => {
-                if (!vrOpen && vrRules.length === 0 && !vrLoading) loadValidationRules(selectedObj);
-                setVrOpen((o) => !o);
-              }}
-              className="w-full flex items-center justify-between px-4 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors select-none"
-            >
-              <span className="flex items-center gap-2">
+            <div className="flex items-center px-4 py-2 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/50 gap-2">
+              {/* Expand/collapse toggle — left side */}
+              <button
+                onClick={() => {
+                  if (!vrOpen && vrRules.length === 0 && !vrLoading) loadValidationRules(selectedObj);
+                  setVrOpen((o) => !o);
+                }}
+                className="flex items-center gap-2 flex-1 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors select-none text-left"
+              >
+                <span className="text-gray-400">{vrOpen ? "▼" : "▶"}</span>
                 <span>⚡ Validation Rules</span>
                 {vrRules.length > 0 && (
                   <span className="px-1.5 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
@@ -422,9 +465,47 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
                   </span>
                 )}
                 {vrLoading && <span className="text-gray-400 italic">loading…</span>}
-              </span>
-              <span className="text-gray-400">{vrOpen ? "▲" : "▼"}</span>
-            </button>
+              </button>
+
+              {/* Bulk action buttons — right side, only when rules are loaded */}
+              {vrRules.length > 0 && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Restore button — only shown after a bulk disable */}
+                  {vrSnapshot && vrSnapshot.length > 0 && (
+                    <button
+                      disabled={vrBulkBusy}
+                      onClick={() => bulkToggleVR(true)}
+                      title={`Re-enable ${vrSnapshot.length} rule(s) that were active before Disable All`}
+                      className="px-2.5 py-1 rounded text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 disabled:opacity-40 transition-colors"
+                    >
+                      ↩ Restore ({vrSnapshot.length})
+                    </button>
+                  )}
+                  {/* Disable All */}
+                  {vrRules.some(r => r.active) && (
+                    <button
+                      disabled={vrBulkBusy}
+                      onClick={() => bulkToggleVR(false)}
+                      title="Disable all active validation rules on this object"
+                      className="px-2.5 py-1 rounded text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 disabled:opacity-40 transition-colors"
+                    >
+                      {vrBulkBusy ? "…" : "Disable All"}
+                    </button>
+                  )}
+                  {/* Enable All — only when all are currently off */}
+                  {vrRules.every(r => !r.active) && !vrSnapshot && (
+                    <button
+                      disabled={vrBulkBusy}
+                      onClick={() => bulkToggleVR(true)}
+                      title="Enable all validation rules on this object"
+                      className="px-2.5 py-1 rounded text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 disabled:opacity-40 transition-colors"
+                    >
+                      {vrBulkBusy ? "…" : "Enable All"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Expanded body */}
             {vrOpen && (
