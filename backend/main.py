@@ -22,7 +22,8 @@ from sf_cli import (list_orgs, list_objects, describe_object, run_apex_anonymous
                     list_profiles, list_permission_sets,
                     get_fls_for_profile, get_object_perms_for_profile,
                     get_fls_for_permset, get_object_perms_for_permset,
-                    get_org_limits, get_validation_rules, toggle_validation_rule)
+                    get_org_limits, get_validation_rules, toggle_validation_rule,
+                    sf_rest_request)
 from sf_cli import _sf as _sf_raw   # for raw SOQL
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
@@ -178,6 +179,25 @@ def toggle_vr(alias: str, object_api: str, body: ToggleVRRequest):
     try:
         toggle_validation_rule(alias, object_api, body.rule_name, body.active)
         return {"ok": True, "active": body.active}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ---------------------------------------------------------------------------
+# REST Explorer proxy
+# ---------------------------------------------------------------------------
+
+class RestProxyRequest(BaseModel):
+    method: str = "GET"
+    path:   str
+    body:   Optional[str] = None   # JSON string, only for POST/PUT/PATCH
+
+
+@app.post("/api/orgs/{alias}/rest")
+def rest_proxy(alias: str, req: RestProxyRequest):
+    try:
+        result = sf_rest_request(alias, req.method, req.path, req.body)
+        return result
     except Exception as e:
         raise HTTPException(500, str(e))
 

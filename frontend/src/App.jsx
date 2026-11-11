@@ -6,6 +6,7 @@ import ProfilesExplorer from "./pages/ProfilesExplorer";
 import SoqlRunner from "./pages/SoqlRunner";
 import ApexRunner from "./pages/ApexRunner";
 import ClaudeChat from "./pages/ClaudeChat";
+import RestExplorer from "./pages/RestExplorer";
 import OrgHealth from "./pages/OrgHealth";
 import { api } from "./api/client";
 import { listen } from "@tauri-apps/api/event";
@@ -19,6 +20,7 @@ const TABS = [
   { id: "soql",     label: "⚡ SOQL Runner"         },
   { id: "apex",     label: "🏃 Apex Runner"         },
   { id: "health",   label: "🏥 Health"              },
+  { id: "rest",     label: "🔬 REST Explorer"       },
   { id: "claude",   label: "🤖 Claude AI"           },
 ];
 
@@ -300,8 +302,9 @@ export default function App() {
         {activeTab === "profiles" && <ProfilesExplorer org={activeOrg} ctx={orgContext} setCtx={setOrgContext} loadObjects={loadObjects} onApiCall={() => fetchLimits()} />}
         {activeTab === "soql"     && <SoqlRunner        org={activeOrg} ctx={orgContext} setCtx={setOrgContext} loadObjects={loadObjects} onApiCall={() => fetchLimits()} />}
         {activeTab === "apex"     && <ApexRunner  org={activeOrg} onApiCall={() => fetchLimits()} />}
-        {activeTab === "health"   && <OrgHealth   org={activeOrg} onApiCall={() => fetchLimits()} />}
-        {activeTab === "claude"   && <ClaudeChat  org={activeOrg} ctx={orgContext} setCtx={setOrgContext} />}
+        {activeTab === "health"   && <OrgHealth     org={activeOrg} onApiCall={() => fetchLimits()} />}
+        {activeTab === "rest"     && <RestExplorer  org={activeOrg} />}
+        {activeTab === "claude"   && <ClaudeChat    org={activeOrg} ctx={orgContext} setCtx={setOrgContext} />}
       </main>
 
       {/* Global footer — API limit status bar */}
@@ -395,6 +398,7 @@ export default function App() {
                     ["📊", "SOQL Runner",          "Query any object with AI assist"],
                     ["⚙️", "Apex Runner",          "Execute and iterate anonymous Apex"],
                     ["🏥", "Org Health",           "26 checks across 7 categories"],
+                    ["🔬", "REST Explorer",        "Browse any Salesforce REST endpoint"],
                     ["🤖", "Claude AI",            "Natural language Salesforce help"],
                   ].map(([icon, name, desc]) => (
                     <div key={name} className="flex gap-2 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">

@@ -693,3 +693,54 @@ def toggle_validation_rule(target_org: str, object_api: str, rule_name: str, act
             errors = (result.get("result") or {}).get("details", {}).get("componentFailures", [])
             msg = "; ".join(e.get("problem", "") for e in errors) if errors else str(result)
             raise RuntimeError(f"Deploy failed ({status}): {msg}")
+
+
+# ---------------------------------------------------------------------------
+# REST Explorer proxy
+# ---------------------------------------------------------------------------
+
+def sf_rest_request(target_org: str, method: str, path: str, body: str = None) -> dict:
+    """Forward an arbitrary REST request to Salesforce using the org's session.
+
+    Args:
+        target_org: org alias
+        method:     HTTP method (GET, POST, PUT, PATCH, DELETE)
+        path:       SF REST path, e.g. /services/data/v59.0/sobjects/Account
+        body:       JSON string body for POST/PUT/PATCH (optional)
+
+    Returns:
+        { "status": <int>, "headers": {...}, "body": <parsed JSON or raw string> }
+    """
+    import urllib.request, urllib.error, urllib.parse
+
+    instance_url, api_version, access_token = _get_auth(target_org)
+
+    # If path is relative (no leading /services/), prepend the base data path
+    if not path.startswith("/"):
+        path = "/" + path
+
+    url = f"{instance_url}{path}"
+
+    data = body.encode("utf-8") if body else None
+    req  = urllib.request.Request(url, data=data, method=method.upper())
+    req.add_header("Authorization", f"Bearer {access_token}")
+    req.add_header("Accept", "application/json")
+    if data:
+        req.add_header("Content-Type", "application/json")
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            raw     = resp.read().decode("utf-8")
+            status  = resp.status
+            headers = dict(resp.headers)
+    except urllib.error.HTTPError as e:
+        raw     = e.read().decode("utf-8")
+        status  = e.code
+        headers = dict(e.headers)
+
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        parsed = raw  # return raw string if not JSON
+
+    return {"status": status, "headers": headers, "body": parsed}
