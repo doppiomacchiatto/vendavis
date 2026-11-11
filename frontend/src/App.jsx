@@ -78,13 +78,16 @@ export default function App() {
     setRestartMsg(null);
     try {
       await invoke("restart_backend");
-      setRestartMsg({ ok: true, text: "Backend restarted" });
+      setRestartMsg({ ok: true, text: "Backend is back online. All features are ready to use." });
     } catch (e) {
-      setRestartMsg({ ok: false, text: String(e) });
+      const raw = String(e);
+      const friendly = raw.includes("15 seconds")
+        ? "Backend did not come back online in time. Try restarting the app if the issue persists."
+        : `Could not restart backend: ${raw}`;
+      setRestartMsg({ ok: false, text: friendly });
     } finally {
       setRestarting(false);
-      // Auto-clear toast after 4 s
-      setTimeout(() => setRestartMsg(null), 4000);
+      setTimeout(() => setRestartMsg(null), 6000);
     }
   }
 
@@ -299,10 +302,11 @@ export default function App() {
           <button
             onClick={handleRestartBackend}
             disabled={restarting}
-            title="Restart the Python backend"
-            className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 border border-blue-400 rounded px-3 py-1 transition-colors"
+            title="Restart the Python backend service"
+            className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 border border-blue-400 rounded px-3 py-1 transition-colors flex items-center gap-1.5"
           >
-            {restarting ? "⏳" : "↺"}
+            <span className={restarting ? "animate-spin inline-block" : ""}>↺</span>
+            <span>{restarting ? "Restarting…" : "Restart Backend"}</span>
           </button>
           <button
             onClick={() => setDebugOpen(true)}
@@ -323,13 +327,16 @@ export default function App() {
 
       {/* Restart backend toast */}
       {restartMsg && (
-        <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-2xl text-sm font-medium border transition-all ${
+        <div className={`fixed bottom-5 right-5 z-50 max-w-sm flex flex-col gap-1 px-4 py-3 rounded-xl shadow-2xl border text-sm transition-all ${
           restartMsg.ok
-            ? "bg-green-900/90 border-green-600 text-green-200"
-            : "bg-red-900/90 border-red-600 text-red-200"
+            ? "bg-green-900/95 border-green-600 text-green-100"
+            : "bg-red-900/95 border-red-600 text-red-100"
         }`}>
-          <span>{restartMsg.ok ? "✅" : "❌"}</span>
-          <span>{restartMsg.text}</span>
+          <div className="flex items-center gap-2 font-semibold">
+            <span>{restartMsg.ok ? "✅" : "❌"}</span>
+            <span>{restartMsg.ok ? "Backend restarted successfully" : "Restart failed"}</span>
+          </div>
+          <p className="text-xs opacity-80 leading-relaxed">{restartMsg.text}</p>
         </div>
       )}
 
