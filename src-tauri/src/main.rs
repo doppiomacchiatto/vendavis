@@ -194,13 +194,18 @@ async fn restart_backend(
     let port = port_state.0;
 
     if cfg!(debug_assertions) {
-        // Dev mode: uvicorn --reload is already watching; just bounce the server
-        let shutdown_url = format!("http://127.0.0.1:{}/api/shutdown", port);
-        let _ = reqwest::Client::new()
-            .post(&shutdown_url)
-            .timeout(std::time::Duration::from_millis(800))
-            .send()
-            .await;
+        // Dev mode: uvicorn --reload watches the filesystem, so we trigger a
+        // reload by touching main.py rather than POSTing /api/shutdown.
+        // Sending SIGTERM (via /api/shutdown) kills the entire reloader, not
+        // just the worker, which is why the backend never came back up.
+        let root = project_root();
+        let main_py = root.join("backend").join("main.py");
+        // `touch` updates mtime so uvicorn's watchdog notices the change
+        let _ = std::process::Command::new("touch")
+            .arg(&main_py)
+            .status();
+        // Give the watcher a moment to detect the change and start reloading
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     } else {
         // Production: kill the child and respawn it
         let plat = platform::get_platform();
@@ -220,17 +225,17 @@ async fn restart_backend(
         }
     }
 
-    // Poll /api/health until backend is back (up to 15 s)
+    // Poll /api/health until backend is back (up to 20 s, 400 ms apart)
     let health_url = format!("http://127.0.0.1:{}/api/health", port);
-    for _ in 0..30 {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    for _ in 0..50 {
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
         if let Ok(resp) = reqwest::get(&health_url).await {
             if resp.status().is_success() {
                 return Ok(port);
             }
         }
     }
-    Err("Backend did not come back online within 15 seconds".to_string())
+    Err("Backend did not come back online within 20 seconds".to_string())
 }
 
 /// Called by the frontend when the user confirms they want to quit.

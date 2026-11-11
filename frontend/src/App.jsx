@@ -82,7 +82,7 @@ export default function App() {
       setRestartPhase("done");
     } catch (e) {
       const raw = String(e);
-      const friendly = raw.includes("15 seconds")
+      const friendly = raw.includes("seconds")
         ? "Backend did not come back online in time. Try quitting and relaunching the app."
         : `Could not restart backend: ${raw}`;
       setRestartError(friendly);
