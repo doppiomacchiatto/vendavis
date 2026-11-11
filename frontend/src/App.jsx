@@ -69,6 +69,25 @@ export default function App() {
   // ── Debug log modal ────────────────────────────────────────────────────────
   const [debugOpen, setDebugOpen] = useState(false);
 
+  // ── Restart backend ────────────────────────────────────────────────────────
+  const [restarting, setRestarting] = useState(false); // "idle" | true
+  const [restartMsg, setRestartMsg] = useState(null);  // null | { ok, text }
+
+  async function handleRestartBackend() {
+    setRestarting(true);
+    setRestartMsg(null);
+    try {
+      await invoke("restart_backend");
+      setRestartMsg({ ok: true, text: "Backend restarted" });
+    } catch (e) {
+      setRestartMsg({ ok: false, text: String(e) });
+    } finally {
+      setRestarting(false);
+      // Auto-clear toast after 4 s
+      setTimeout(() => setRestartMsg(null), 4000);
+    }
+  }
+
   // ── App version (read from Tauri at startup) ───────────────────────────────
   const [appVersion, setAppVersion] = useState("1.0.1");
   useEffect(() => {
@@ -276,6 +295,15 @@ export default function App() {
           >
             API
           </button>
+          {/* Restart backend */}
+          <button
+            onClick={handleRestartBackend}
+            disabled={restarting}
+            title="Restart the Python backend"
+            className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 border border-blue-400 rounded px-3 py-1 transition-colors"
+          >
+            {restarting ? "⏳" : "↺"}
+          </button>
           <button
             onClick={() => setDebugOpen(true)}
             className="text-sm bg-blue-600 hover:bg-blue-500 border border-blue-400 rounded px-3 py-1 transition-colors"
@@ -292,6 +320,18 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* Restart backend toast */}
+      {restartMsg && (
+        <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-2xl text-sm font-medium border transition-all ${
+          restartMsg.ok
+            ? "bg-green-900/90 border-green-600 text-green-200"
+            : "bg-red-900/90 border-red-600 text-red-200"
+        }`}>
+          <span>{restartMsg.ok ? "✅" : "❌"}</span>
+          <span>{restartMsg.text}</span>
+        </div>
+      )}
 
       {/* Tab bar */}
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />

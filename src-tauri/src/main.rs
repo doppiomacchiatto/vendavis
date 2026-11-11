@@ -172,6 +172,59 @@ fn build_app_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     Menu::with_items(app, &[&app_menu])
 }
 
+/// Restart the FastAPI backend.
+/// - Production: kill the tracked child, respawn it, then poll until healthy.
+/// - Dev:        POST /api/shutdown so uvicorn --reload restarts the worker,
+///               then poll until healthy.
+/// Returns Ok(port) when the backend is back up, Err(msg) if it times out.
+#[tauri::command]
+async fn restart_backend(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, BackendProcess>,
+    port_state: tauri::State<'_, BackendPort>,
+) -> Result<u16, String> {
+    let port = port_state.0;
+
+    if cfg!(debug_assertions) {
+        // Dev mode: uvicorn --reload is already watching; just bounce the server
+        let shutdown_url = format!("http://127.0.0.1:{}/api/shutdown", port);
+        let _ = reqwest::Client::new()
+            .post(&shutdown_url)
+            .timeout(std::time::Duration::from_millis(800))
+            .send()
+            .await;
+    } else {
+        // Production: kill the child and respawn it
+        let plat = platform::get_platform();
+        if let Ok(mut guard) = backend.0.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = plat.kill_process_tree(&mut child);
+                let _ = child.wait();
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        if let Some(child) = start_backend(port, Some(&app)) {
+            if let Ok(mut guard) = backend.0.lock() {
+                *guard = Some(child);
+            }
+        } else {
+            return Err("Failed to start backend process".to_string());
+        }
+    }
+
+    // Poll /api/health until backend is back (up to 15 s)
+    let health_url = format!("http://127.0.0.1:{}/api/health", port);
+    for _ in 0..30 {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        if let Ok(resp) = reqwest::get(&health_url).await {
+            if resp.status().is_success() {
+                return Ok(port);
+            }
+        }
+    }
+    Err("Backend did not come back online within 15 seconds".to_string())
+}
+
 /// Called by the frontend when the user confirms they want to quit.
 /// Tells the backend to shut down gracefully, then kills the process group
 /// and exits the application.
@@ -238,7 +291,8 @@ fn main() {
             api_get,
             api_post,
             open_file,
-            confirm_close
+            confirm_close,
+            restart_backend
         ]);
 
     // macOS: replace the native "About Vendavis" menu item with one that
