@@ -16,7 +16,7 @@ const STATUS_COLOR = (s) =>
   : s >= 400           ? "text-red-600   dark:text-red-400"
   :                      "text-yellow-600 dark:text-yellow-400";
 
-const DEFAULT_PATH = "/services/data/v59.0/";
+const DEFAULT_PATH = "/services/data/v68.0/";
 
 // History stored in module scope so it persists across tab switches (not across sessions)
 let _history = [];
@@ -173,7 +173,7 @@ export default function RestExplorer({ org }) {
             onKeyDown={e => { if (e.key === "Enter") execute(); }}
             spellCheck={false}
             className="flex-1 font-mono text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="/services/data/v59.0/"
+            placeholder="/services/data/v68.0/"
           />
 
           {/* Up button */}

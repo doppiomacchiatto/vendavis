@@ -84,7 +84,7 @@ def get_org_limits(target_org: str) -> dict:
     info = _sf("org", "display", "--target-org", target_org)
     result = info.get("result", {})
     instance_url = result.get("instanceUrl") or result.get("instance_url") or ""
-    api_version  = result.get("apiVersion") or result.get("api_version") or "59.0"
+    api_version  = result.get("apiVersion") or result.get("api_version") or "68.0"
 
     # sf org display redacts the token — use the dedicated command
     token_info   = _sf("org", "auth", "show-access-token", "--target-org", target_org)
@@ -593,7 +593,7 @@ def _get_auth(target_org: str):
     info   = _sf("org", "display", "--target-org", target_org)
     result = info.get("result", {})
     instance_url = result.get("instanceUrl") or result.get("instance_url") or ""
-    api_version  = result.get("apiVersion")  or result.get("api_version")  or "59.0"
+    api_version  = result.get("apiVersion")  or result.get("api_version")  or "68.0"
     token_info   = _sf("org", "auth", "show-access-token", "--target-org", target_org)
     access_token = (token_info.get("result") or {}).get("accessToken") or \
                    (token_info.get("result") or {}).get("access_token")
@@ -661,7 +661,7 @@ def toggle_validation_rule(target_org: str, object_api: str, rule_name: str, act
         (tmp / "sfdx-project.json").write_text(json.dumps({
             "packageDirectories": [{"path": "force-app", "default": True}],
             "namespace": "",
-            "sourceApiVersion": "59.0",
+            "sourceApiVersion": "68.0",
         }))
 
         # force-app/main/default/objects/{Object}/validationRules/
@@ -705,7 +705,7 @@ def sf_rest_request(target_org: str, method: str, path: str, body: str = None) -
     Args:
         target_org: org alias
         method:     HTTP method (GET, POST, PUT, PATCH, DELETE)
-        path:       SF REST path, e.g. /services/data/v59.0/sobjects/Account
+        path:       SF REST path, e.g. /services/data/v68.0/sobjects/Account
         body:       JSON string body for POST/PUT/PATCH (optional)
 
     Returns:
