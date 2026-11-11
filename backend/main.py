@@ -143,10 +143,12 @@ def get_fields(alias: str, object_api: str):
                 "apiName":  f.get("name", ""),
                 "label":    f.get("label", ""),
                 "type":     f.get("type", ""),
-                "readable": f.get("filterable", True),
-                "editable": not f.get("calculated", False) and not f.get("autoNumber", False),
+                # readable = the running user can read this field (accessible)
+                "readable": f.get("accessible", True),
+                # editable = the running user can write this field
+                "editable": f.get("updateable", False) or f.get("createable", False),
                 # required on create: field must be supplied when creating a record
-                # (createable=True, nillable=False, not system-defaulted on insert)
+                # (createable=True AND nillable=False AND not system-defaulted on insert)
                 "required": (
                     f.get("createable", False) and
                     not f.get("nillable", True) and
