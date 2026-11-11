@@ -30,6 +30,21 @@ export const STATUS_COLOR = {
   running: "text-blue-300",
 };
 
+// ── Shared security-settings cache (one fetch per run, reused by all 9 checks) ─
+const _ssCache = {};
+async function fetchSecuritySettings(alias, _api) {
+  if (_ssCache[alias]) return _ssCache[alias];
+  try {
+    const d = await _api(`/api/orgs/${alias}/security-settings`);
+    _ssCache[alias] = { ok: true, data: d };
+  } catch (e) {
+    _ssCache[alias] = { ok: false, error: e?.message ?? "Failed to retrieve SecuritySettings" };
+  }
+  // Cache busts after 2 minutes so a re-run gets fresh data
+  setTimeout(() => { delete _ssCache[alias]; }, 120_000);
+  return _ssCache[alias];
+}
+
 export const HEALTH_CHECKS = [
   // ── API Limits ─────────────────────────────────────────────────────────────
   {
@@ -142,13 +157,14 @@ export const HEALTH_CHECKS = [
     tip: "Restricting logins to known IP ranges (Setup → Security → Network Access) is one of the most effective controls for preventing unauthorized access. Without IP ranges, any credential compromise can be exploited from anywhere. Add your office/VPN CIDRs to reduce your attack surface.",
     drillQuery: null,
     async run(alias, _api) {
-      const d = await _api(`/api/orgs/${alias}/security-settings`);
-      const ranges = d.ipRanges ?? [];
+      const r = await fetchSecuritySettings(alias, _api);
+      if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
+      const ranges = r.data.ipRanges ?? [];
       if (ranges.length === 0) return { status: "warn", detail: "No IP allowlist ranges configured — logins allowed from any IP" };
-      const rows = ranges.map(r => ({
-        "Start IP": r.start ?? "",
-        "End IP":   r.end ?? "",
-        "Description": r.description ?? "",
+      const rows = ranges.map(rng => ({
+        "Start IP": rng.start ?? "",
+        "End IP":   rng.end ?? "",
+        "Description": rng.description ?? "",
       }));
       return { status: "pass", detail: `${ranges.length} IP range(s) configured`, rows };
     },
@@ -158,8 +174,9 @@ export const HEALTH_CHECKS = [
     tip: "Salesforce enforces TLS on all connections, but the requireHttps session setting should still be true to prevent any HTTP downgrade attempts. Verify in Setup → Session Settings → Require secure connections (HTTPS).",
     drillQuery: null,
     async run(alias, _api) {
-      const d = await _api(`/api/orgs/${alias}/security-settings`);
-      const val = d.sessionSettings?.requireHttps;
+      const r = await fetchSecuritySettings(alias, _api);
+      if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
+      const val = r.data.sessionSettings?.requireHttps;
       if (val === "false") return { status: "fail", detail: "requireHttps is disabled — org allows non-HTTPS sessions" };
       return { status: "pass", detail: "HTTPS required for all sessions" };
     },
@@ -169,14 +186,14 @@ export const HEALTH_CHECKS = [
     tip: "Long or unlimited session timeouts increase the risk of session hijacking from unattended workstations. Best practice is ≤ 2 hours for internal users. Configure in Setup → Session Settings → Timeout Value.",
     drillQuery: null,
     async run(alias, _api) {
-      const d = await _api(`/api/orgs/${alias}/security-settings`);
-      const timeout = d.sessionSettings?.sessionTimeout;
-      if (!timeout) return { status: "info", detail: "Session timeout value not available" };
-      // Values: TwentyMinutes, ThirtyMinutes, OneHour, TwoHours, FourHours, EightHours, TwelveHours, TwentyFourHours
+      const r = await fetchSecuritySettings(alias, _api);
+      if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
+      const timeout = r.data.sessionSettings?.sessionTimeout;
+      if (!timeout) return { status: "info", detail: "Session timeout value not returned by this org" };
       const longTimeouts = ["TwelveHours", "TwentyFourHours"];
       const medTimeouts  = ["FourHours", "EightHours"];
-      if (longTimeouts.includes(timeout)) return { status: "warn", detail: `Session timeout set to ${timeout} — consider reducing to 2h or less` };
-      if (medTimeouts.includes(timeout))  return { status: "warn", detail: `Session timeout set to ${timeout}` };
+      if (longTimeouts.includes(timeout)) return { status: "warn", detail: `Session timeout: ${timeout} — consider reducing to 2h or less` };
+      if (medTimeouts.includes(timeout))  return { status: "warn", detail: `Session timeout: ${timeout}` };
       return { status: "pass", detail: `Session timeout: ${timeout}` };
     },
   },
@@ -185,9 +202,10 @@ export const HEALTH_CHECKS = [
     tip: "NIST SP 800-63B recommends at least 8 characters, and most orgs should target 12+. Configure in Setup → Password Policies. Pair with MFA for best protection.",
     drillQuery: null,
     async run(alias, _api) {
-      const d = await _api(`/api/orgs/${alias}/security-settings`);
-      const len = parseInt(d.passwordPolicies?.minimumPasswordLength ?? "0", 10);
-      if (!len) return { status: "info", detail: "Password minimum length not available" };
+      const r = await fetchSecuritySettings(alias, _api);
+      if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
+      const len = parseInt(r.data.passwordPolicies?.minimumPasswordLength ?? "0", 10);
+      if (!len) return { status: "info", detail: "Password minimum length not returned by this org" };
       if (len < 8)  return { status: "fail", detail: `Minimum password length is ${len} — below NIST minimum of 8` };
       if (len < 12) return { status: "warn", detail: `Minimum password length is ${len} — consider 12+ for stronger security` };
       return { status: "pass", detail: `Minimum password length: ${len} characters` };
@@ -198,9 +216,10 @@ export const HEALTH_CHECKS = [
     tip: "Password complexity enforcement prevents trivially guessable passwords. Set at least 'AlphaNumeric' in Setup → Password Policies. 'SpecialCharacters' provides the strongest baseline.",
     drillQuery: null,
     async run(alias, _api) {
-      const d = await _api(`/api/orgs/${alias}/security-settings`);
-      const complexity = d.passwordPolicies?.complexity;
-      if (!complexity) return { status: "info", detail: "Password complexity not available" };
+      const r = await fetchSecuritySettings(alias, _api);
+      if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
+      const complexity = r.data.passwordPolicies?.complexity;
+      if (!complexity) return { status: "info", detail: "Password complexity not returned by this org" };
       if (complexity === "NoRestriction") return { status: "fail", detail: "Password complexity set to NoRestriction — any password is accepted" };
       return { status: "pass", detail: `Password complexity: ${complexity}` };
     },
@@ -210,9 +229,10 @@ export const HEALTH_CHECKS = [
     tip: "Passwords that never expire can remain compromised indefinitely. Configure expiration in Setup → Password Policies. 90–180 day rotation is a common enterprise baseline; pair with MFA to reduce rotation pressure.",
     drillQuery: null,
     async run(alias, _api) {
-      const d = await _api(`/api/orgs/${alias}/security-settings`);
-      const expiry = d.passwordPolicies?.expiration;
-      if (!expiry) return { status: "info", detail: "Password expiration not available" };
+      const r = await fetchSecuritySettings(alias, _api);
+      if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
+      const expiry = r.data.passwordPolicies?.expiration;
+      if (!expiry) return { status: "info", detail: "Password expiration not returned by this org" };
       if (expiry === "Never") return { status: "warn", detail: "Passwords never expire — consider setting a rotation policy" };
       return { status: "pass", detail: `Password expiration: ${expiry}` };
     },
@@ -222,9 +242,10 @@ export const HEALTH_CHECKS = [
     tip: "No lockout (or 10+ attempts) makes brute-force attacks easier. Set max login attempts to 5 or fewer in Setup → Password Policies → Maximum Invalid Login Attempts. Combine with IP allowlisting for defense-in-depth.",
     drillQuery: null,
     async run(alias, _api) {
-      const d = await _api(`/api/orgs/${alias}/security-settings`);
-      const attempts = d.passwordPolicies?.maxLoginAttempts;
-      if (!attempts) return { status: "info", detail: "Login lockout setting not available" };
+      const r = await fetchSecuritySettings(alias, _api);
+      if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
+      const attempts = r.data.passwordPolicies?.maxLoginAttempts;
+      if (!attempts) return { status: "info", detail: "Login lockout setting not returned by this org" };
       if (["NoLimit", "TenOrMore"].includes(attempts)) return { status: "warn", detail: `Max login attempts: ${attempts} — consider tightening to 5 or fewer` };
       return { status: "pass", detail: `Max login attempts before lockout: ${attempts}` };
     },
@@ -234,9 +255,10 @@ export const HEALTH_CHECKS = [
     tip: "By default, IP ranges are only checked at login — a session started inside a trusted IP can continue from an untrusted one. Enable 'Enforce login IP ranges on every request' in Setup → Session Settings to check IP on every API call.",
     drillQuery: null,
     async run(alias, _api) {
-      const d = await _api(`/api/orgs/${alias}/security-settings`);
-      const ranges = d.ipRanges ?? [];
-      const enforce = d.sessionSettings?.enforceIpRangesEveryRequest;
+      const r = await fetchSecuritySettings(alias, _api);
+      if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
+      const ranges  = r.data.ipRanges ?? [];
+      const enforce = r.data.sessionSettings?.enforceIpRangesEveryRequest;
       if (ranges.length === 0) return { status: "info", detail: "No IP ranges configured — this setting has no effect" };
       if (enforce === "false") return { status: "warn", detail: "IP ranges are configured but not enforced on every request" };
       return { status: "pass", detail: "IP ranges enforced on every request" };
@@ -247,8 +269,9 @@ export const HEALTH_CHECKS = [
     tip: "When enabled, System Admins can log in as any user without knowing their password. This is convenient for troubleshooting but is a significant privilege. Disable in Setup → Security → Login Access Policies unless actively needed, and monitor usage via Setup Audit Trail.",
     drillQuery: null,
     async run(alias, _api) {
-      const d = await _api(`/api/orgs/${alias}/security-settings`);
-      const val = d.loginAccessPolicies?.administratorsCanLogInAsAny;
+      const r = await fetchSecuritySettings(alias, _api);
+      if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
+      const val = r.data.loginAccessPolicies?.administratorsCanLogInAsAny;
       if (val === "true") return { status: "warn", detail: "Admins can log in as any user — monitor and disable if not required" };
       return { status: "pass", detail: "Admin login-as is disabled" };
     },

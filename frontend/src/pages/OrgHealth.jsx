@@ -42,41 +42,133 @@ function DrillTable({ rows }) {
   );
 }
 
+// ── Check detail modal ────────────────────────────────────────────────────────
+function CheckDetailModal({ chk, result, org, onClose }) {
+  const [drillRows, setDrillRows] = useState(null);
+  const status = result?.status ?? "info";
+
+  const headerBg = status === "fail" ? "bg-red-950/60 border-red-700/60"
+    : status === "warn"              ? "bg-yellow-950/40 border-yellow-700/50"
+    : status === "pass"              ? "bg-green-950/40 border-green-700/50"
+    : "bg-slate-800/80 border-slate-600/50";
+
+  const accentText = status === "fail" ? "text-red-300"
+    : status === "warn"               ? "text-yellow-300"
+    : status === "pass"               ? "text-green-300"
+    : "text-blue-300";
+
+  // Auto-load drill query when modal opens
+  useState(() => {
+    if (!chk.drillQuery) return;
+    setDrillRows("loading");
+    api("/api/soql", { method: "POST", body: JSON.stringify({ alias: org.alias, query: chk.drillQuery }) })
+      .then(res => setDrillRows(res.records || []))
+      .catch(() => setDrillRows("error"));
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+      {/* Modal */}
+      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-slate-600/60 bg-slate-900 shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className={`shrink-0 flex items-start gap-3 px-5 py-4 border-b ${headerBg}`}>
+          <span className="text-xl mt-0.5">{STATUS_ICON[status]}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white leading-tight">{chk.label}</p>
+            {result?.detail && (
+              <p className={`text-xs mt-1 ${accentText}`}>{result.detail}</p>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 text-slate-400 hover:text-white transition-colors text-lg leading-none"
+          >✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5">
+
+          {/* How to fix */}
+          {chk.tip && (
+            <section>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base">💡</span>
+                <p className="text-xs font-semibold text-slate-200 uppercase tracking-wide">How to fix</p>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{chk.tip}</p>
+            </section>
+          )}
+
+          {/* Inline data rows (e.g. IP ranges from check result) */}
+          {Array.isArray(result?.rows) && result.rows.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base">📋</span>
+                <p className="text-xs font-semibold text-slate-200 uppercase tracking-wide">Details</p>
+              </div>
+              <DrillTable rows={result.rows} />
+            </section>
+          )}
+
+          {/* SOQL drill-down */}
+          {chk.drillQuery && (
+            <section>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-base">🔍</span>
+                <p className="text-xs font-semibold text-slate-200 uppercase tracking-wide">Records</p>
+              </div>
+              {drillRows === "loading" && <p className="text-xs text-slate-400 animate-pulse">Loading records…</p>}
+              {drillRows === "error"   && <p className="text-xs text-red-400">Could not load records.</p>}
+              {Array.isArray(drillRows) && drillRows.length === 0 && (
+                <p className="text-xs text-slate-400 italic">No records returned.</p>
+              )}
+              {Array.isArray(drillRows) && drillRows.length > 0 && <DrillTable rows={drillRows} />}
+              <p className="text-xs text-slate-500 mt-2 font-mono break-all">{chk.drillQuery}</p>
+            </section>
+          )}
+
+          {/* Fallback if nothing to show */}
+          {!chk.tip && !chk.drillQuery && !Array.isArray(result?.rows) && (
+            <p className="text-sm text-slate-400 italic">No additional details available.</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 flex justify-end px-5 py-3 border-t border-slate-700/50">
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Single check row ──────────────────────────────────────────────────────────
 function CheckRow({ chk, result, org }) {
-  const [open,      setOpen]      = useState(false);
-  const [drillRows, setDrillRows] = useState(null); // null | "loading" | "error" | []
+  const [modalOpen, setModalOpen] = useState(false);
 
-  const isRunning = result === null;
-  const status    = isRunning ? "running" : (result?.status ?? "info");
-  const canExpand = !isRunning && result && (status === "warn" || status === "fail");
-
-  async function loadDrill() {
-    if (!chk.drillQuery || drillRows) return;
-    setDrillRows("loading");
-    try {
-      const res = await api("/api/soql", { method: "POST", body: JSON.stringify({ alias: org.alias, query: chk.drillQuery }) });
-      setDrillRows(res.records || []);
-    } catch {
-      setDrillRows("error");
-    }
-  }
-
-  function toggle() {
-    if (!canExpand) return;
-    const opening = !open;
-    setOpen(opening);
-    if (opening) loadDrill();
-  }
+  const isRunning  = result === null;
+  const status     = isRunning ? "running" : (result?.status ?? "info");
+  const hasContent = !isRunning && result && (chk.tip || chk.drillQuery || Array.isArray(result.rows));
 
   const borderCls = status === "fail" ? "border-red-700/60 bg-red-950/20"
     : status === "warn"               ? "border-yellow-700/60 bg-yellow-950/10"
     : "border-slate-700/40 bg-slate-800/30";
 
   return (
-    <div className={`rounded-lg border overflow-hidden ${borderCls}`}>
-      {/* Row header */}
-      <div className="flex items-center gap-2 px-3 py-2">
+    <>
+      <div
+        className={`rounded-lg border px-3 py-2 flex items-center gap-2 transition-colors ${borderCls} ${hasContent ? "cursor-pointer hover:brightness-110" : ""}`}
+        onClick={() => hasContent && setModalOpen(true)}
+      >
         <span className="text-sm shrink-0">
           {isRunning ? <span className="animate-pulse">⏳</span> : STATUS_ICON[status]}
         </span>
@@ -87,44 +179,20 @@ function CheckRow({ chk, result, org }) {
           )}
           {isRunning && <p className="text-xs text-slate-400 mt-0.5 animate-pulse">Running…</p>}
         </div>
-        {canExpand && (
-          <button onClick={toggle}
-            className={`shrink-0 text-xs px-2 py-1 rounded-md border transition-colors font-medium ${
-              status === "fail"
-                ? "border-red-700 text-red-300 hover:bg-red-900/40"
-                : "border-yellow-700 text-yellow-300 hover:bg-yellow-900/40"
-            }`}>
-            {open ? "▲ Hide" : "▼ Details"}
-          </button>
+        {hasContent && !isRunning && (
+          <span className="shrink-0 text-slate-500 text-xs">›</span>
         )}
       </div>
 
-      {/* Expanded panel */}
-      {canExpand && open && (
-        <div className={`border-t px-4 py-3 flex flex-col gap-3 ${
-          status === "fail" ? "border-red-800/50" : "border-yellow-800/50"
-        }`}>
-          {chk.tip && (
-            <div className="flex gap-2">
-              <span className="shrink-0 text-base">💡</span>
-              <div>
-                <p className="text-xs font-semibold text-slate-200 mb-1">How to fix</p>
-                <p className="text-xs text-slate-300 leading-relaxed">{chk.tip}</p>
-              </div>
-            </div>
-          )}
-          {chk.drillQuery && (
-            <div>
-              <p className="text-xs font-semibold text-slate-200 mb-1.5">📋 Records</p>
-              {drillRows === "loading" && <p className="text-xs text-slate-400 animate-pulse">Loading…</p>}
-              {drillRows === "error"   && <p className="text-xs text-red-400">Could not load records.</p>}
-              {Array.isArray(drillRows) && <DrillTable rows={drillRows} />}
-              <p className="text-xs text-blue-600 mt-1.5 font-mono break-all">{chk.drillQuery}</p>
-            </div>
-          )}
-        </div>
+      {modalOpen && (
+        <CheckDetailModal
+          chk={chk}
+          result={result}
+          org={org}
+          onClose={() => setModalOpen(false)}
+        />
       )}
-    </div>
+    </>
   );
 }
 
