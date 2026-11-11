@@ -147,14 +147,19 @@ def get_fields(alias: str, object_api: str):
                 "readable": f.get("accessible", True),
                 # editable = the running user can write this field
                 "editable": f.get("updateable", False) or f.get("createable", False),
-                # required on create: nillable=False means Salesforce enforces a value.
-                # We only gate on createable so system fields (Id, CreatedDate etc.)
-                # are excluded. defaultedOnCreate is intentionally NOT used because
-                # Salesforce sets it true even for fields the user must still supply
-                # (e.g. Account.Name in some org configurations).
+                # required on create: a field is required if Salesforce will reject
+                # a blank value at save time. Two cases:
+                #   1. nillable=False  — SF enforces non-null at the API level
+                #   2. nameField=True  — the primary name field (e.g. Account.Name)
+                #      is always required even though Salesforce marks it nillable=True
+                #      on PersonAccount-enabled orgs (compound switchablepersonname).
+                # We gate on createable so system fields (Id, CreatedDate, etc.)
+                # are excluded regardless of nillable status.
                 "required": (
-                    f.get("createable", False) and
-                    not f.get("nillable", True)
+                    f.get("createable", False) and (
+                        not f.get("nillable", True) or
+                        f.get("nameField", False)
+                    )
                 ),
             }
             for f in raw_fields
