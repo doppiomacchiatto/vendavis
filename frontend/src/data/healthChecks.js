@@ -38,7 +38,14 @@ async function fetchSecuritySettings(alias, _api) {
     const d = await _api(`/api/orgs/${alias}/security-settings`);
     _ssCache[alias] = { ok: true, data: d };
   } catch (e) {
-    _ssCache[alias] = { ok: false, error: e?.message ?? "Failed to retrieve SecuritySettings" };
+    // Translate raw HTTP errors into a friendly message
+    const raw = e?.message ?? "";
+    let friendly = "Could not retrieve org security settings — restart the app and try again";
+    if (raw.includes("404"))        friendly = "Security settings endpoint not found — please restart the app";
+    else if (raw.includes("500"))   friendly = "Server error reading security settings — check the backend log";
+    else if (raw.includes("timed out") || raw.includes("timeout")) friendly = "Security settings request timed out — the org may be slow to respond";
+    else if (raw.includes("NetworkError") || raw.includes("fetch")) friendly = "Could not reach the backend — is the app running?";
+    _ssCache[alias] = { ok: false, error: friendly };
   }
   // Cache busts after 2 minutes so a re-run gets fresh data
   setTimeout(() => { delete _ssCache[alias]; }, 120_000);
