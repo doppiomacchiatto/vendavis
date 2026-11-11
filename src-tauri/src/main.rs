@@ -71,6 +71,14 @@ fn start_backend(port: u16, app_handle: Option<&tauri::AppHandle>) -> Option<Chi
 // Tauri commands
 // ---------------------------------------------------------------------------
 
+/// Write arbitrary text content to a user-chosen path.
+/// Called after the frontend has shown a native Save dialog.
+#[tauri::command]
+fn write_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content.as_bytes())
+        .map_err(|e| format!("Could not write '{}': {}", path, e))
+}
+
 /// Open a file with the OS default application
 #[tauri::command]
 fn open_file(path: String) -> Result<(), String> {
@@ -291,6 +299,7 @@ fn main() {
             api_get,
             api_post,
             open_file,
+            write_file,
             confirm_close,
             restart_backend
         ]);

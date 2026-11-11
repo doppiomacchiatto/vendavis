@@ -7,6 +7,7 @@ import { api } from "../api/client";
 import Spinner from "../components/Spinner";
 import DebugLogPanel from "../components/DebugLogPanel";
 import { invoke } from "@tauri-apps/api/core";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import {
   HEALTH_CHECKS, CHECK_CATEGORIES,
   CATEGORY_ICONS, STATUS_ICON, STATUS_COLOR,
@@ -363,17 +364,30 @@ export default function OrgHealth({ org, onApiCall }) {
   }, [org]);
 
   // ── Export report ─────────────────────────────────────────────────────────
+  const [exportToast, setExportToast] = useState(null); // null | { ok, path, error }
+
   async function exportReport() {
+    const defaultName = `vendavis-health-${org?.alias ?? "org"}-${new Date().toISOString().slice(0,10)}.html`;
+    let filePath;
+    try {
+      filePath = await saveDialog({
+        title: "Save Org Health Report",
+        defaultPath: defaultName,
+        filters: [{ name: "HTML Report", extensions: ["html"] }],
+      });
+    } catch {
+      return; // dialog cancelled or errored — do nothing
+    }
+    if (!filePath) return; // user cancelled
+
     const html = buildReportHtml(org, results, HEALTH_CHECKS);
-    const blob = new Blob([html], { type: "text/html" });
-    const url  = URL.createObjectURL(blob);
-    // Use a hidden anchor to trigger download
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `vendavis-health-${org?.alias ?? "org"}-${new Date().toISOString().slice(0,10)}.html`;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
+    try {
+      await invoke("write_file", { path: filePath, content: html });
+      setExportToast({ ok: true, path: filePath });
+    } catch (e) {
+      setExportToast({ ok: false, error: String(e) });
+    }
+    setTimeout(() => setExportToast(null), 6000);
   }
 
   // filterCat: undefined/null = run all; string = run only that category
@@ -610,6 +624,36 @@ export default function OrgHealth({ org, onApiCall }) {
         onToggle={() => setDebugOpen((o) => !o)}
         onClear={() => setDebugLog([])}
       />
+
+      {/* ── Export saved toast ──────────────────────────────────────────────── */}
+      {exportToast && (
+        <div className={`fixed bottom-5 right-5 z-50 max-w-sm flex flex-col gap-1.5 px-4 py-3 rounded-xl shadow-2xl border text-sm transition-all ${
+          exportToast.ok
+            ? "bg-green-900/95 border-green-600 text-green-100"
+            : "bg-red-900/95 border-red-600 text-red-100"
+        }`}>
+          {exportToast.ok ? (
+            <>
+              <div className="flex items-center gap-2 font-semibold">
+                <span>✅</span>
+                <span>Report saved</span>
+              </div>
+              <p className="text-xs font-mono text-green-300 break-all leading-relaxed">{exportToast.path}</p>
+              <button
+                onClick={() => invoke("open_file", { path: exportToast.path })}
+                className="mt-1 self-start text-xs px-3 py-1 rounded-md bg-green-700 hover:bg-green-600 text-white transition-colors"
+              >
+                Open in Browser
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span>❌</span>
+              <span>{exportToast.error}</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
