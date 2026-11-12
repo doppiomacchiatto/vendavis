@@ -3,7 +3,7 @@
  * Phases: "preflight" → "running" → "done"
  */
 import { useState, useRef, useEffect } from "react";
-import { api } from "../api/client";
+import { api, waitForBackend } from "../api/client";
 import Spinner from "../components/Spinner";
 import DebugLogPanel from "../components/DebugLogPanel";
 import { invoke } from "@tauri-apps/api/core";
@@ -14,6 +14,9 @@ import {
 } from "../data/healthChecks";
 
 // ── HTML report generator ─────────────────────────────────────────────────────
+const esc = (s) => String(s ?? "")
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
 function buildReportHtml(org, results, checks) {
   const now   = new Date().toLocaleString();
   const total = checks.length;
@@ -36,13 +39,13 @@ function buildReportHtml(org, results, checks) {
     const catRows = catChecks.map(chk => {
       const r = results[chk.id];
       if (!r) return "";
-      const tip = chk.tip ? `<div style="margin-top:6px;padding:8px 10px;background:#f8fafc;border-left:3px solid #94a3b8;font-size:11px;color:#475569;line-height:1.5">💡 ${chk.tip}</div>` : "";
+      const tip = chk.tip ? `<div style="margin-top:6px;padding:8px 10px;background:#f8fafc;border-left:3px solid #94a3b8;font-size:11px;color:#475569;line-height:1.5">💡 ${esc(chk.tip)}</div>` : "";
       return `
         <tr style="border-bottom:1px solid #e2e8f0">
           <td style="padding:10px 12px;vertical-align:top;width:36px">${statusBadge(r.status)}</td>
           <td style="padding:10px 12px;vertical-align:top">
-            <div style="font-weight:600;font-size:13px;color:#0f172a">${chk.label}</div>
-            <div style="font-size:12px;color:#64748b;margin-top:2px">${r.detail ?? ""}</div>
+            <div style="font-weight:600;font-size:13px;color:#0f172a">${esc(chk.label)}</div>
+            <div style="font-size:12px;color:#64748b;margin-top:2px">${esc(r.detail)}</div>
             ${(r.status === "fail" || r.status === "warn") ? tip : ""}
           </td>
         </tr>`;
@@ -50,7 +53,7 @@ function buildReportHtml(org, results, checks) {
 
     return `
       <tr><td colspan="2" style="padding:14px 12px 4px;background:#f1f5f9">
-        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569">${CATEGORY_ICONS[cat] ?? ""} ${cat}</span>
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569">${CATEGORY_ICONS[cat] ?? ""} ${esc(cat)}</span>
       </td></tr>
       ${catRows}`;
   }).join("");
@@ -60,7 +63,7 @@ function buildReportHtml(org, results, checks) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Org Health Report — ${org?.alias ?? "Unknown"}</title>
+<title>Org Health Report — ${esc(org?.alias ?? "Unknown")}</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin: 0; padding: 32px; background: #fff; color: #0f172a; }
@@ -81,7 +84,7 @@ function buildReportHtml(org, results, checks) {
 </head>
 <body>
   <h1>🏥 Org Health Report</h1>
-  <div class="meta">Org: <strong>${org?.alias ?? "Unknown"}</strong> &nbsp;·&nbsp; ${org?.username ?? ""} &nbsp;·&nbsp; Generated: ${now}</div>
+  <div class="meta">Org: <strong>${esc(org?.alias ?? "Unknown")}</strong> &nbsp;·&nbsp; ${esc(org?.username ?? "")} &nbsp;·&nbsp; Generated: ${esc(now)}</div>
   <div class="summary">
     <div class="badge badge-fail">❌ ${fails} Failed</div>
     <div class="badge badge-warn">⚠️ ${warns} Warnings</div>
@@ -142,14 +145,22 @@ function CheckDetailModal({ chk, result, org, onClose }) {
     : status === "pass"               ? "text-green-300"
     : "text-blue-300";
 
-  // Auto-load drill query when modal opens
-  useState(() => {
+  // Auto-load the drill-down query when the modal opens
+  useEffect(() => {
     if (!chk.drillQuery) return;
+    let cancelled = false;
     setDrillRows("loading");
     api("/api/soql", { method: "POST", body: JSON.stringify({ alias: org.alias, query: chk.drillQuery }) })
-      .then(res => setDrillRows(res.records || []))
-      .catch(() => setDrillRows("error"));
-  }, []);
+      .then(res => { if (!cancelled) setDrillRows(res.records || []); })
+      .catch(() => { if (!cancelled) setDrillRows("error"); });
+    return () => { cancelled = true; };
+  }, [chk, org]);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -420,6 +431,21 @@ export default function OrgHealth({ org, onApiCall }) {
       const chk = checksToRun[i];
       setCurrent({ idx: i, total: checksToRun.length, label: chk.label, category: chk.category });
       setResults(r => ({ ...r, [chk.id]: null }));
+      // Don't fail a check just because the backend is still starting / restarting
+      let waited = false;
+      const up = await waitForBackend({
+        shouldStop: () => cancelRef.current,
+        onWaiting: () => {
+          waited = true;
+          log("Waiting for backend services to start…", "warn");
+          setCurrent({ idx: i, total: checksToRun.length, label: "Waiting for backend services…", category: chk.category });
+        },
+      });
+      if (!up) break;
+      if (waited) {
+        log("Backend services ready", "success");
+        setCurrent({ idx: i, total: checksToRun.length, label: chk.label, category: chk.category });
+      }
       const t0 = Date.now();
       try {
         const result = await chk.run(org.alias, api);

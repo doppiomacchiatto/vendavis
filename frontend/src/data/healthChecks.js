@@ -184,6 +184,7 @@ export const HEALTH_CHECKS = [
       const r = await fetchSecuritySettings(alias, _api);
       if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
       const val = r.data.sessionSettings?.requireHttps;
+      if (val === undefined) return { status: "info", detail: "Require HTTPS setting not returned by this org" };
       if (val === "false") return { status: "fail", detail: "requireHttps is disabled — org allows non-HTTPS sessions" };
       return { status: "pass", detail: "HTTPS required for all sessions" };
     },
@@ -253,7 +254,7 @@ export const HEALTH_CHECKS = [
       if (!r.ok) return { status: "info", detail: `Security settings unavailable: ${r.error}` };
       const attempts = r.data.passwordPolicies?.maxLoginAttempts;
       if (!attempts) return { status: "info", detail: "Login lockout setting not returned by this org" };
-      if (["NoLimit", "TenOrMore"].includes(attempts)) return { status: "warn", detail: `Max login attempts: ${attempts} — consider tightening to 5 or fewer` };
+      if (["NoLimit", "TenAttempts"].includes(attempts)) return { status: "warn", detail: `Max login attempts: ${attempts} — consider tightening to 5 or fewer` };
       return { status: "pass", detail: `Max login attempts before lockout: ${attempts}` };
     },
   },
