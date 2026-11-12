@@ -36,6 +36,7 @@ export default function ProfilesExplorer({ org, ctx, setCtx, loadObjects: loadOb
   const [exportedFiles,   setExportedFiles]   = useState([]);
   const [exportStatus,    setExportStatus]    = useState("");
   const [helpOpen,        setHelpOpen]        = useState(false);
+  const [guideOpen,       setGuideOpen]       = useState(true);
   const cancelRef = useRef(false);
 
   // ── Debug log ─────────────────────────────────────────────────────────────
@@ -272,7 +273,33 @@ export default function ProfilesExplorer({ org, ctx, setCtx, loadObjects: loadOb
   ];
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative">
+      {/* ── Floating guidance panel ─────────────────────────────────────────── */}
+      {guideOpen && (
+        <div className="absolute top-3 right-3 z-20 w-56 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-xl shadow-lg overflow-hidden">
+          <div className="flex items-center justify-between bg-blue-600 px-3 py-2">
+            <span className="text-xs font-semibold text-white tracking-wide">How to use</span>
+            <button onClick={() => setGuideOpen(false)} className="text-blue-200 hover:text-white text-sm leading-none">✕</button>
+          </div>
+          <div className="px-3 py-3 flex flex-col gap-2.5">
+            {[
+              ["1", "Load Profiles or Perm Sets", "Click 'Load Profiles' or 'Load Perm Sets' in the left sidebar"],
+              ["2", "Select a principal",          "Click a Profile or Permission Set to select it"],
+              ["3", "Load Objects",                "Click 'Load Objects' to see FLS for the selected principal"],
+              ["4", "Export to Excel",             "Check objects and click Export"],
+            ].map(([n, title, desc]) => (
+              <div key={n} className="flex gap-2.5">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center mt-0.5">{n}</span>
+                <div>
+                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug mt-0.5">{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {overlayMsg && (
         <LoadingOverlay
           message={overlayMsg}
