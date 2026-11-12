@@ -199,7 +199,14 @@ export default function App() {
   async function testSkillsConnection() {
     setSkillsTest("testing");
     try {
-      const d = await api("/api/ai/skills");
+      const d = await api("/api/ai/skills/test", {
+        method: "POST",
+        body: JSON.stringify({
+          skills_source: settingsDraft.skills_source,
+          skills_path:   settingsDraft.skills_path,
+          skills_url:    settingsDraft.skills_url,
+        }),
+      });
       const active = (d.skills || []).filter(s => s.available);
       if (active.length === 0) {
         setSkillsTest({ ok: false, msg: "No skill files found at the configured location.", skills: d.skills || [], version: d.version || {} });

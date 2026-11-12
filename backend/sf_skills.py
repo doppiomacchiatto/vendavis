@@ -242,12 +242,15 @@ def augment_system(system: Optional[str], messages: list[dict]) -> str:
 # Manifest — for /api/ai/skills endpoint
 # ---------------------------------------------------------------------------
 
-def get_skills_manifest() -> dict:
+def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
     """
     Return a dict describing bundled skills, config state, and version info.
     Used by the /api/ai/skills endpoint to power the Settings UI panel.
+    Pass config_override to test a draft config without saving it first.
     """
     cfg = _load_skills_config()
+    if config_override:
+        cfg = {**cfg, **config_override}
     root = _resolve_skills_root(cfg)
 
     # Version info

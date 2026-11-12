@@ -173,14 +173,34 @@ def post_settings(req: SettingsRequest):
     return {"ok": True}
 
 
+class SkillsTestRequest(BaseModel):
+    skills_source: Optional[str] = None
+    skills_path:   Optional[str] = None
+    skills_url:    Optional[str] = None
+
 @app.get("/api/ai/skills")
 def get_ai_skills():
-    """
-    Returns the skills manifest: enabled state, source config, version,
-    and per-skill availability. Used by the Settings UI Skills panel.
-    """
+    """Returns the skills manifest from saved config."""
     try:
         return get_skills_manifest()
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/ai/skills/test")
+def test_ai_skills(req: SkillsTestRequest):
+    """
+    Test skills availability using the provided draft config values
+    (before they are saved). Used by the Settings UI Test button.
+    """
+    try:
+        override = {}
+        if req.skills_source is not None:
+            override["source"] = req.skills_source
+        if req.skills_path is not None:
+            override["path"] = req.skills_path
+        if req.skills_url is not None:
+            override["url"] = req.skills_url
+        return get_skills_manifest(config_override=override)
     except Exception as e:
         raise HTTPException(500, str(e))
 
