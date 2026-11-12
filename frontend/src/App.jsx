@@ -7,6 +7,7 @@ import SoqlRunner from "./pages/SoqlRunner";
 import ApexRunner from "./pages/ApexRunner";
 import ClaudeChat from "./pages/ClaudeChat";
 import OrgHealth from "./pages/OrgHealth";
+import RestExplorer from "./pages/RestExplorer";
 import DebugLogModal from "./components/DebugLogModal";
 import WelcomeModal, { shouldShowWelcome } from "./components/WelcomeModal";
 import { api } from "./api/client";
@@ -20,6 +21,7 @@ const TABS = [
   { id: "soql",     label: "⚡ SOQL Runner"         },
   { id: "apex",     label: "🏃 Apex Runner"         },
   { id: "health",   label: "🏥 Health"              },
+  { id: "rest",     label: "🔬 REST Explorer"       },
   { id: "claude",   label: "🤖 OpenCode"            },
 ];
 
@@ -67,8 +69,31 @@ export default function App() {
   // ── Welcome modal (shown once on first launch) ────────────────────────────
   const [welcomeOpen, setWelcomeOpen] = useState(() => shouldShowWelcome());
 
-  // ── Debug log modal ────────────────────────────────────────────────────────
-  const [debugOpen, setDebugOpen] = useState(false);
+  // ── Restart backend modal ──────────────────────────────────────────────────
+  // phase: "idle" | "restarting" | "done" | "error"
+  const [restartPhase, setRestartPhase] = useState("idle");
+  const [restartError, setRestartError] = useState(null);
+
+  async function handleRestartBackend() {
+    setRestartPhase("restarting");
+    setRestartError(null);
+    try {
+      await invoke("restart_backend");
+      setRestartPhase("done");
+    } catch (e) {
+      const raw = String(e);
+      const friendly = raw.includes("seconds")
+        ? "Backend did not come back online in time. Try quitting and relaunching the app."
+        : `Could not restart backend: ${raw}`;
+      setRestartError(friendly);
+      setRestartPhase("error");
+    }
+  }
+
+  function closeRestartModal() {
+    setRestartPhase("idle");
+    setRestartError(null);
+  }
 
   // ── App version (read from Tauri at startup) ───────────────────────────────
   const [appVersion, setAppVersion] = useState("1.0.1");
@@ -323,6 +348,14 @@ export default function App() {
             API
           </button>
           <button
+            onClick={handleRestartBackend}
+            disabled={restartPhase === "restarting"}
+            title="Restart the Python backend service"
+            className="text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 border border-blue-400 rounded px-3 py-1 transition-colors"
+          >
+            Restart Backend
+          </button>
+          <button
             onClick={() => setDebugOpen(true)}
             className="text-sm bg-blue-600 hover:bg-blue-500 border border-blue-400 rounded px-3 py-1 transition-colors"
             title="Debug log"
@@ -339,6 +372,64 @@ export default function App() {
         </div>
       </header>
 
+      {/* Restart backend modal */}
+      {restartPhase !== "idle" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={restartPhase !== "restarting" ? closeRestartModal : undefined} />
+          <div className="relative w-full max-w-sm rounded-2xl border border-slate-600/60 bg-slate-900 shadow-2xl overflow-hidden">
+
+            {/* Header */}
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-700/60 bg-[#1a2d5a]">
+              <span className="text-xl">⚙️</span>
+              <p className="text-sm font-semibold text-white">Restart Backend</p>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-6 flex flex-col items-center gap-4 text-center">
+              {restartPhase === "restarting" && (
+                <>
+                  <div className="w-12 h-12 rounded-full border-4 border-blue-500/30 border-t-blue-400 animate-spin" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">Restarting backend…</p>
+                    <p className="text-xs text-slate-400 mt-1">Waiting for the service to come back online.</p>
+                  </div>
+                </>
+              )}
+              {restartPhase === "done" && (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center text-2xl">✅</div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Backend restarted</p>
+                    <p className="text-xs text-slate-400 mt-1">The service is back online. All features are ready to use.</p>
+                  </div>
+                </>
+              )}
+              {restartPhase === "error" && (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center text-2xl">❌</div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Restart failed</p>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">{restartError}</p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            {restartPhase !== "restarting" && (
+              <div className="px-6 py-4 border-t border-slate-700/60 flex justify-end">
+                <button
+                  onClick={closeRestartModal}
+                  className="px-5 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tab bar */}
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
@@ -349,6 +440,7 @@ export default function App() {
         {activeTab === "soql"     && <SoqlRunner        org={activeOrg} ctx={orgContext} setCtx={setOrgContext} loadObjects={loadObjects} onApiCall={() => fetchLimits()} />}
         {activeTab === "apex"     && <ApexRunner  org={activeOrg} onApiCall={() => fetchLimits()} />}
         {activeTab === "health"   && <OrgHealth   org={activeOrg} onApiCall={() => fetchLimits()} />}
+        {activeTab === "rest"     && <RestExplorer org={activeOrg} />}
         {activeTab === "claude"   && <ClaudeChat  org={activeOrg} ctx={orgContext} setCtx={setOrgContext} />}
       </main>
 
@@ -442,7 +534,8 @@ export default function App() {
                     ["👤", "Profiles & PermSets",  "Compare permissions side by side"],
                     ["📊", "SOQL Runner",          "Query any object with AI assist"],
                     ["⚙️", "Apex Runner",          "Execute and iterate anonymous Apex"],
-                    ["🏥", "Org Health",           "26 checks across 7 categories"],
+                    ["🏥", "Org Health",           "35 checks across 7 categories"],
+                    ["🔬", "REST Explorer",        "Browse any Salesforce REST endpoint"],
                     ["🤖", "OpenCode AI",          "Natural language Salesforce help"],
                   ].map(([icon, name, desc]) => (
                     <div key={name} className="flex gap-2 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
