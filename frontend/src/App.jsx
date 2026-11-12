@@ -956,21 +956,25 @@ export default function App() {
                         <div key={s.name} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs ${
                           s.available
                             ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
-                            : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60"
+                            : s.bundled === false
+                              ? "bg-white dark:bg-gray-900 border-dashed border-gray-200 dark:border-gray-700 opacity-50"
+                              : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60"
                         }`}>
-                          <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${s.available ? "bg-green-500" : "bg-gray-400"}`} />
+                          <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
+                            s.available ? "bg-green-500" : s.bundled === false ? "bg-gray-300" : "bg-gray-400"
+                          }`} />
                           <div className="flex flex-col gap-0.5 min-w-0">
                             <span className="font-semibold text-gray-800 dark:text-gray-200">{s.label}</span>
                             <span className="text-gray-500 dark:text-gray-400 leading-snug">{s.description}</span>
                           </div>
-                          {s.available && (
-                            <span className="ml-auto shrink-0 text-gray-400 dark:text-gray-500 font-mono">
-                              {s.file_count} file{s.file_count !== 1 ? "s" : ""}
-                            </span>
-                          )}
-                          {!s.available && (
-                            <span className="ml-auto shrink-0 text-gray-400 italic">not found</span>
-                          )}
+                          <span className="ml-auto shrink-0 font-mono text-gray-400 dark:text-gray-500">
+                            {s.available
+                              ? `${s.file_count} file${s.file_count !== 1 ? "s" : ""}`
+                              : s.bundled === false
+                                ? <span className="italic text-gray-300 dark:text-gray-600 font-sans">coming soon</span>
+                                : <span className="italic">not found</span>
+                            }
+                          </span>
                         </div>
                       ))}
                     </div>

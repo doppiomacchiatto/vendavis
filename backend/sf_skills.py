@@ -275,12 +275,27 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
         except Exception:
             version_info = {"commit": "unknown", "date": ""}
 
-    # Skill status — check whether each skill's primary SKILL.md is readable
+    # Build full catalog — bundled skills first, then upstream-only ones
     skills_status = []
-    for skill_name, files in SKILL_FILES.items():
-        primary = files[0] if files else ""
+
+    for skill_name in _UPSTREAM_CATALOG:
+        is_bundled = skill_name in SKILL_FILES
+        files      = SKILL_FILES.get(skill_name, [])
+
+        if not is_bundled:
+            # Not yet bundled — show in catalog as coming soon
+            skills_status.append({
+                "name":        skill_name,
+                "label":       _SKILL_LABELS.get(skill_name, skill_name),
+                "description": _SKILL_DESCS.get(skill_name, ""),
+                "file_count":  0,
+                "available":   False,
+                "bundled":     False,
+            })
+            continue
+
         if cfg.get("source") == "url":
-            available = bool(cfg.get("url"))  # optimistic — can't probe without fetching
+            available  = bool(cfg.get("url"))  # optimistic — can't probe without fetching
             file_count = len(files)
         elif root:
             file_count = sum(1 for f in files if (root / f).exists())
@@ -295,6 +310,7 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
             "description": _SKILL_DESCS.get(skill_name, ""),
             "file_count":  file_count,
             "available":   available,
+            "bundled":     True,
         })
 
     return {
@@ -308,11 +324,38 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
 
 
 _SKILL_LABELS = {
-    "platform-soql-query":    "SOQL Query",
-    "platform-apex-generate": "Apex Generate",
+    "platform-soql-query":            "SOQL Query",
+    "platform-apex-generate":         "Apex Generate",
+    "platform-apex-refactor":         "Apex Refactor",
+    "platform-apex-unittest":         "Apex Unit Test",
+    "platform-flows-generate":        "Flows Generate",
+    "platform-lwc-generate":          "LWC Generate",
+    "platform-metadata-retrieve":     "Metadata Retrieve",
+    "platform-metadata-deploy":       "Metadata Deploy",
+    "platform-permissions-analyze":   "Permissions Analyze",
 }
 
 _SKILL_DESCS = {
-    "platform-soql-query":    "SOQL authoring, optimization, anti-patterns, and reference",
-    "platform-apex-generate": "Apex class and trigger generation, best practices",
+    "platform-soql-query":            "SOQL authoring, optimization, anti-patterns, and reference",
+    "platform-apex-generate":         "Apex class and trigger generation, best practices",
+    "platform-apex-refactor":         "Apex code refactoring and modernization",
+    "platform-apex-unittest":         "Apex unit test authoring and coverage guidance",
+    "platform-flows-generate":        "Salesforce Flow and Process Builder authoring",
+    "platform-lwc-generate":          "Lightning Web Component generation and patterns",
+    "platform-metadata-retrieve":     "Metadata API retrieve operations and packaging",
+    "platform-metadata-deploy":       "Metadata API deploy, validation, and rollback",
+    "platform-permissions-analyze":   "Permission set and profile security analysis",
 }
+
+# Skills in the upstream repo not yet bundled — shown in the UI as coming soon
+_UPSTREAM_CATALOG = [
+    "platform-soql-query",           # bundled
+    "platform-apex-generate",        # bundled
+    "platform-apex-refactor",
+    "platform-apex-unittest",
+    "platform-flows-generate",
+    "platform-lwc-generate",
+    "platform-metadata-retrieve",
+    "platform-metadata-deploy",
+    "platform-permissions-analyze",
+]
