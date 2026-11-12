@@ -33,9 +33,10 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _HERE       = Path(__file__).resolve().parent
 SKILLS_DIR  = _HERE / "sf_skills"          # default bundled location
-CONFIG_PATH = Path.home() / ".avio_config.json"
+CONFIG_PATH  = Path.home() / ".avio_config.json"
+USER_SKILLS  = Path.home() / ".avio_skills"   # downloaded/imported skills live here
 
-GH_RAW_BASE = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main"
+GH_RAW_BASE  = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main"
 
 # ---------------------------------------------------------------------------
 # Skill file manifest  (relative paths within any skills root directory)
@@ -265,24 +266,155 @@ def _load_custom_skill_context(entry: dict) -> Optional[str]:
     return f"## {name} (custom)\n\n" + "\n\n---\n\n".join(parts)
 
 
-def _build_custom_context(cfg: dict) -> str:
-    """Build context block for all configured custom skills. Returns '' if none."""
-    customs = cfg.get("custom_skills") or []
-    if not customs:
+def fetch_skill(name: str, source: str) -> dict:
+    """
+    Download or copy a skill into ~/.avio_skills/<name>/ and return a status dict.
+
+    source can be:
+      - "bundled:<slug>"             copy from SKILLS_DIR/<slug>
+      - "https://..." or "http://..." fetch markdown files from a raw HTTP server
+      - "file:///..." or "/abs/path"  copy from a local directory
+      - "github:<slug>"              fetch from GH_RAW_BASE/<slug>
+
+    Returns {"ok": bool, "path": str, "files": int, "error": str|None}
+    """
+    import shutil
+
+    slug = name.strip().replace(" ", "-").lower()
+    dest = USER_SKILLS / slug
+    dest.mkdir(parents=True, exist_ok=True)
+
+    files_written = 0
+
+    try:
+        # ── bundled sentinel ──────────────────────────────────────────────────
+        if source.startswith("bundled:"):
+            skill_slug = source[len("bundled:"):]
+            src_dir = SKILLS_DIR / skill_slug
+            if not src_dir.is_dir():
+                return {"ok": False, "path": str(dest), "files": 0, "error": f"Bundled skill '{skill_slug}' not found"}
+            for md in src_dir.rglob("*.md"):
+                rel = md.relative_to(src_dir)
+                out = dest / rel
+                out.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(md, out)
+                files_written += 1
+
+        # ── GitHub shorthand ──────────────────────────────────────────────────
+        elif source.startswith("github:"):
+            skill_slug = source[len("github:"):]
+            base_url = f"{GH_RAW_BASE}/{skill_slug}"
+            files_written = _fetch_skill_from_url(base_url, dest)
+
+        # ── HTTP(S) URL ───────────────────────────────────────────────────────
+        elif source.startswith("http://") or source.startswith("https://"):
+            files_written = _fetch_skill_from_url(source.rstrip("/"), dest)
+
+        # ── file:// or local path ─────────────────────────────────────────────
+        else:
+            raw = source[7:] if source.startswith("file://") else source
+            src_dir = Path(raw).expanduser()
+            if not src_dir.is_dir():
+                return {"ok": False, "path": str(dest), "files": 0, "error": f"Directory not found: {src_dir}"}
+            for md in src_dir.rglob("*.md"):
+                rel = md.relative_to(src_dir)
+                out = dest / rel
+                out.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(md, out)
+                files_written += 1
+
+        # Write a meta file so we know the origin
+        (dest / ".avio_skill_meta.json").write_text(
+            json.dumps({"name": name, "source": source, "fetched": str(Path(__file__).parent)}, indent=2)
+        )
+
+        if files_written == 0:
+            return {"ok": False, "path": str(dest), "files": 0, "error": "No markdown files found at source"}
+
+        log.info("sf_skills: fetched '%s' → %s (%d files)", name, dest, files_written)
+        return {"ok": True, "path": str(dest), "files": files_written, "error": None}
+
+    except Exception as e:
+        log.error("sf_skills: fetch_skill failed for '%s': %s", name, e)
+        return {"ok": False, "path": str(dest), "files": 0, "error": str(e)}
+
+
+def _fetch_skill_from_url(base_url: str, dest: Path) -> int:
+    """
+    Fetch SKILL.md and known reference files from a raw HTTP base URL into dest/.
+    Returns number of files written.
+    """
+    import datetime
+    candidates = [
+        "SKILL.md",
+        "references/anti-patterns.md",
+        "references/query-optimization.md",
+        "references/soql-reference.md",
+        "references/best-practices.md",
+        "references/patterns.md",
+        "references/reference.md",
+        "references/guidelines.md",
+        "references/examples.md",
+    ]
+    written = 0
+    for rel in candidates:
+        content = _load_file_url(base_url, rel)
+        if content:
+            out = dest / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(content, encoding="utf-8")
+            written += 1
+    return written
+
+
+def _build_user_skills_context() -> str:
+    """
+    Build context block for all skills in ~/.avio_skills/.
+    These are skills downloaded/imported by the user via Add Skill.
+    Returns '' if none exist.
+    """
+    if not USER_SKILLS.is_dir():
         return ""
     sections = []
-    for entry in customs:
-        block = _load_custom_skill_context(entry)
-        if block:
-            sections.append(block)
+    for skill_dir in sorted(USER_SKILLS.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        # Read display name from meta
+        display = skill_dir.name
+        meta_file = skill_dir / ".avio_skill_meta.json"
+        if meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text())
+                display = meta.get("name") or display
+            except Exception:
+                pass
+        parts = []
+        skill_md = skill_dir / "SKILL.md"
+        if skill_md.exists():
+            content = _load_file_local(skill_dir, "SKILL.md")
+            if content:
+                parts.append(content)
+        for md in sorted(skill_dir.rglob("*.md")):
+            if md == skill_md or md.name.startswith("."):
+                continue
+            try:
+                content = md.read_text(encoding="utf-8")
+                content = re.sub(r"<!--.*?-->", "", content, flags=re.DOTALL).strip()
+                if content:
+                    parts.append(content)
+            except Exception:
+                pass
+        if parts:
+            sections.append(f"## {display}\n\n" + "\n\n---\n\n".join(parts))
+
     if not sections:
         return ""
     return (
         "\n\n"
-        "=== CUSTOM SKILL REFERENCE ===\n"
-        "The following custom guidance applies to this request.\n\n"
+        "=== ADDITIONAL SKILL REFERENCE ===\n"
+        "The following additional guidance has been added to Avio.\n\n"
         + "\n\n===\n\n".join(sections)
-        + "\n\n=== END CUSTOM SKILL REFERENCE ==="
+        + "\n\n=== END ADDITIONAL SKILL REFERENCE ==="
     )
 
 
@@ -354,11 +486,10 @@ def augment_system(system: Optional[str], messages: list[dict]) -> str:
     log.info("sf_skills: injecting skills %s (source=%s)", skills, cfg.get("source"))
     result = (system or "") + skill_ctx
 
-    # Also inject any custom skills unconditionally (always relevant)
-    custom_ctx = _build_custom_context(cfg)
-    if custom_ctx:
-        log.info("sf_skills: injecting %d custom skill(s)", len(cfg.get("custom_skills") or []))
-        result += custom_ctx
+    # Also inject any user-downloaded skills from ~/.avio_skills/
+    user_ctx = _build_user_skills_context()
+    if user_ctx:
+        result += user_ctx
 
     return result
 
@@ -438,44 +569,42 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
             "bundled":     True,
         })
 
-    # Append custom skills to catalog
-    for entry in (cfg.get("custom_skills") or []):
-        raw_path = (entry.get("path") or "").strip()
-        is_url = raw_path.startswith("http://") or raw_path.startswith("https://")
-        if is_url:
-            # Optimistic — we don't probe at manifest time to avoid latency
-            available = True
-            file_count = 1
-        else:
-            fp = raw_path
-            if fp.startswith("bundled:"):
-                fp = str(SKILLS_DIR / fp[len("bundled:"):])
-            elif fp.startswith("file://"):
-                fp = fp[7:]
-            root_p = Path(fp).expanduser() if fp else None
-            skill_md = (root_p / "SKILL.md") if root_p else None
-            file_count = sum(1 for _ in root_p.rglob("*.md")) if (root_p and root_p.is_dir()) else 0
-            available = bool(skill_md and skill_md.exists())
-        display_name = entry.get("name") or raw_path.rstrip("/").split("/")[-1]
-        skills_status.append({
-            "name":        display_name,
-            "label":       display_name,
-            "description": raw_path,
-            "file_count":  file_count,
-            "available":   available,
-            "bundled":     True,   # treat as first-class for display purposes
-            "custom":      True,
-        })
+    # Append skills from ~/.avio_skills/ — downloaded/imported by the user
+    if USER_SKILLS.is_dir():
+        for skill_dir in sorted(USER_SKILLS.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            # Read meta if present for display name
+            meta = {}
+            meta_file = skill_dir / ".avio_skill_meta.json"
+            if meta_file.exists():
+                try:
+                    meta = json.loads(meta_file.read_text())
+                except Exception:
+                    pass
+            skill_md   = skill_dir / "SKILL.md"
+            file_count = sum(1 for f in skill_dir.rglob("*.md") if not f.name.startswith("."))
+            available  = skill_md.exists() and file_count > 0
+            display    = meta.get("name") or skill_dir.name
+            source_url = meta.get("source", "")
+            skills_status.append({
+                "name":        skill_dir.name,
+                "label":       display,
+                "description": source_url or str(skill_dir),
+                "file_count":  file_count,
+                "available":   available,
+                "bundled":     True,
+                "user":        True,   # downloaded by user, not shipped with app
+            })
 
     source = cfg.get("source", "bundled")
     return {
-        "enabled":        cfg.get("enabled", True),
-        "source":         source,
-        "skills_path":    cfg.get("path") or "",
-        "skills_url":     cfg.get("url") or (GH_RAW_BASE if source == "github" else ""),
-        "custom_skills":  cfg.get("custom_skills") or [],
-        "version":        version_info,
-        "skills":         skills_status,
+        "enabled":     cfg.get("enabled", True),
+        "source":      source,
+        "skills_path": cfg.get("path") or "",
+        "skills_url":  cfg.get("url") or (GH_RAW_BASE if source == "github" else ""),
+        "version":     version_info,
+        "skills":      skills_status,
     }
 
 

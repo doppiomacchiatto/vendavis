@@ -141,9 +141,11 @@ export default function App() {
   const [settingsOpen,  setSettingsOpen]  = useState(false);
   const [settingsDraft, setSettingsDraft] = useState({ api_key: "", model: "", base_url: "", theme: "system", skills_enabled: true, skills_source: "bundled", skills_path: "", skills_url: "", custom_skills: [] });
   const [skillsTest,    setSkillsTest]    = useState(null);   // null | "testing" | { ok, msg, skills, version }
-  const [addSkillPath,  setAddSkillPath]  = useState("");      // draft path for custom skill
-  const [addSkillName,  setAddSkillName]  = useState("");      // draft name label for custom skill
-  const [addSkillOpen,  setAddSkillOpen]  = useState(false);   // show inline add form
+  const [addSkillPath,     setAddSkillPath]     = useState("");      // draft path for custom skill
+  const [addSkillName,     setAddSkillName]     = useState("");      // draft name label for custom skill
+  const [addSkillOpen,     setAddSkillOpen]     = useState(false);   // show inline add form
+  const [addSkillFetching, setAddSkillFetching] = useState(false);   // download in progress
+  const [addSkillError,    setAddSkillError]    = useState("");      // error from fetch
   const [settingsTab,   setSettingsTab]   = useState("model"); // "model" | "skills"
   const [availModels,   setAvailModels]   = useState([]);
   const [providers,     setProviders]     = useState([]);
@@ -172,6 +174,11 @@ export default function App() {
       setSettingsKeySource(d.key_source || "none");
       setSkillsTest(null);
       setSettingsTab("model");
+      // Pre-load skills catalog in background so it's ready when user opens Skills tab
+      api("/api/ai/skills").then(d => {
+        const active = (d.skills || []).filter(s => s.available);
+        setSkillsTest({ ok: active.length > 0, msg: `${active.length} of ${d.skills.length} skill${d.skills.length !== 1 ? "s" : ""} available`, skills: d.skills || [], version: d.version || {} });
+      }).catch(() => {});
       setAddSkillOpen(false);
       setAddSkillPath("");
       setAddSkillName("");
@@ -992,21 +999,32 @@ export default function App() {
                     </label>
                   )}
 
-                  {/* Test button */}
+                  {/* Test / refresh button */}
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={testSkillsConnection}
                       disabled={!settingsDraft.skills_enabled || skillsTest === "testing"}
                       className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                      title="Test current (unsaved) source settings"
                     >
-                      {skillsTest === "testing" ? "Testing…" : "Test connection"}
+                      {skillsTest === "testing" ? "Checking…" : "↻ Refresh"}
                     </button>
-                    {skillsTest && skillsTest !== "testing" && (
-                      <span className={`text-xs ${skillsTest.ok ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>
-                        {skillsTest.ok ? "✓ " : "✗ "}{skillsTest.msg}
-                      </span>
-                    )}
+                    {skillsTest && skillsTest !== "testing" && (() => {
+                      const sf      = (skillsTest.skills || []).filter(s => !s.user);
+                      const added   = (skillsTest.skills || []).filter(s => s.user);
+                      const sfAvail = sf.filter(s => s.available).length;
+                      const addAvail= added.filter(s => s.available).length;
+                      const parts = [];
+                      if (sf.length)    parts.push(`${sfAvail} of ${sf.length} Salesforce`);
+                      if (added.length) parts.push(`${addAvail} added`);
+                      const ok = sfAvail > 0 || addAvail > 0;
+                      return (
+                        <span className={`text-xs ${ok ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>
+                          {ok ? "✓ " : "✗ "}{parts.join(" · ")} skill{sfAvail + addAvail !== 1 ? "s" : ""} available
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   {/* Version line */}
@@ -1032,25 +1050,6 @@ export default function App() {
                       </button>
                     )}
                   </div>
-
-                  {/* Existing custom skills list */}
-                  {settingsDraft.custom_skills.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      {settingsDraft.custom_skills.map((cs, i) => (
-                        <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-xs">
-                          <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-                          <span className="font-medium text-gray-800 dark:text-gray-200 truncate flex-1">{cs.name || cs.path}</span>
-                          <span className="text-gray-400 dark:text-gray-500 font-mono truncate max-w-[120px]">{cs.path}</span>
-                          <button
-                            type="button"
-                            onClick={() => setSettingsDraft(d => ({ ...d, custom_skills: d.custom_skills.filter((_, j) => j !== i) }))}
-                            className="text-gray-300 hover:text-red-400 dark:text-gray-600 dark:hover:text-red-400 transition-colors ml-1 shrink-0"
-                            title="Remove"
-                          >✕</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
 
                   {/* Add skill inline form */}
                   {addSkillOpen && (() => {
@@ -1110,50 +1109,105 @@ export default function App() {
                         >Cancel</button>
                         <button
                           type="button"
-                          disabled={!addSkillPath.trim()}
-                          onClick={() => {
-                            const entry = { name: addSkillName.trim() || addSkillPath.trim().split("/").pop(), path: addSkillPath.trim() };
-                            setSettingsDraft(d => ({ ...d, custom_skills: [...d.custom_skills, entry] }));
-                            setAddSkillOpen(false); setAddSkillPath(""); setAddSkillName("");
+                          disabled={!addSkillPath.trim() || addSkillFetching}
+                          onClick={async () => {
+                            const name = addSkillName.trim() || addSkillPath.trim().split("/").pop();
+                            setAddSkillFetching(true);
+                            setAddSkillError("");
+                            try {
+                              await api("/api/ai/skills/fetch", {
+                                method: "POST",
+                                body: JSON.stringify({ name, source: addSkillPath.trim() }),
+                              });
+                              setAddSkillOpen(false); setAddSkillPath(""); setAddSkillName("");
+                              // Refresh the catalog to show the new skill
+                              testSkillsConnection();
+                            } catch (e) {
+                              setAddSkillError(e.message || "Failed to add skill");
+                            } finally {
+                              setAddSkillFetching(false);
+                            }
                           }}
                           className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-medium transition-colors"
-                        >Add</button>
+                        >{addSkillFetching ? "Adding…" : "Add"}</button>
                       </div>
+                      {addSkillError && (
+                        <p className="text-xs text-red-500 mt-1">✗ {addSkillError}</p>
+                      )}
                     </div>
                     );
                   })()}
                 </div>
 
-                {/* Scrollable skills list */}
-                {skillsTest && skillsTest !== "testing" && skillsTest.skills?.length > 0 && (
-                  <div className="flex flex-col gap-2 mt-3 overflow-y-auto flex-1 min-h-0 pr-1">
-                    {skillsTest.skills.map(s => (
-                      <div key={s.name} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs shrink-0 ${
-                        s.available
-                          ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
-                          : s.bundled === false
-                            ? "border-dashed border-gray-200 dark:border-gray-700 opacity-50"
-                            : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60"
-                      }`}>
-                        <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
-                          s.available ? "bg-green-500" : s.bundled === false ? "bg-gray-300" : "bg-gray-400"
-                        }`} />
-                        <div className="flex flex-col gap-0.5 min-w-0">
-                          <span className="font-semibold text-gray-800 dark:text-gray-200">{s.label}</span>
-                          <span className="text-gray-500 dark:text-gray-400 leading-snug">{s.description}</span>
-                        </div>
-                        <span className="ml-auto shrink-0 text-gray-400 dark:text-gray-500 font-mono">
-                          {s.available
-                            ? `${s.file_count} file${s.file_count !== 1 ? "s" : ""}`
-                            : s.bundled === false
-                              ? <span className="italic font-sans text-gray-300 dark:text-gray-600">coming soon</span>
-                              : <span className="italic">not found</span>
-                          }
-                        </span>
+                {/* Scrollable skills catalog — unified list */}
+                {skillsTest && skillsTest !== "testing" && (() => {
+                  const sfSkills   = (skillsTest.skills || []).filter(s => !s.user);
+                  const userSkills = (skillsTest.skills || []).filter(s => s.user);
+
+                  const SkillCard = ({ s }) => (
+                    <div className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs shrink-0 ${
+                      s.available
+                        ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                        : s.bundled === false
+                          ? "border-dashed border-gray-200 dark:border-gray-700 opacity-50"
+                          : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60"
+                    }`}>
+                      <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
+                        s.available ? "bg-green-500" : s.bundled === false ? "bg-gray-300" : "bg-gray-400"
+                      }`} />
+                      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                        <span className="font-semibold text-gray-800 dark:text-gray-200">{s.label}</span>
+                        {s.user && <span className="text-gray-400 dark:text-gray-500 font-mono truncate text-[10px]">{s.description}</span>}
+                        {!s.user && <span className="text-gray-500 dark:text-gray-400 leading-snug">{s.description}</span>}
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <span className="ml-2 shrink-0 text-gray-400 dark:text-gray-500 font-mono">
+                        {s.available
+                          ? `${s.file_count} file${s.file_count !== 1 ? "s" : ""}`
+                          : s.bundled === false
+                            ? <span className="italic font-sans text-gray-300 dark:text-gray-600">coming soon</span>
+                            : <span className="italic">not found</span>
+                        }
+                      </span>
+                      {s.user && (
+                        <button
+                          type="button"
+                          title="Remove skill"
+                          onClick={async () => {
+                            try {
+                              await api("/api/ai/skills/fetch", {
+                                method: "DELETE",
+                                body: JSON.stringify({ name: s.name }),
+                              });
+                              testSkillsConnection();
+                            } catch (e) { /* ignore */ }
+                          }}
+                          className="ml-1 text-gray-300 hover:text-red-400 dark:text-gray-600 dark:hover:text-red-400 transition-colors shrink-0"
+                        >✕</button>
+                      )}
+                    </div>
+                  );
+
+                  return (
+                    <div className="flex flex-col gap-3 mt-3 overflow-y-auto flex-1 min-h-0 pr-1">
+                      {/* Salesforce Skills section */}
+                      <div className="flex flex-col gap-1.5">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Salesforce Skills</p>
+                        {sfSkills.length === 0
+                          ? <p className="text-xs text-gray-400 italic py-2">No skills found at the configured source.</p>
+                          : sfSkills.map(s => <SkillCard key={s.name} s={s} />)
+                        }
+                      </div>
+
+                      {/* Added Skills section */}
+                      {userSkills.length > 0 && (
+                        <div className="flex flex-col gap-1.5">
+                          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Added Skills</p>
+                          {userSkills.map(s => <SkillCard key={s.name} s={s} />)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

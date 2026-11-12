@@ -32,7 +32,7 @@ import vr_snapshot
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
 from ai_client import AIClient, PROVIDER_PRESETS, fetch_models, needs_key, save_config, _load_avio_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config
-from sf_skills import augment_system, get_skills_manifest
+from sf_skills import augment_system, get_skills_manifest, fetch_skill
 
 app = FastAPI(title="Avio", version="2.0.0")
 
@@ -197,7 +197,7 @@ def get_ai_skills():
 def test_ai_skills(req: SkillsTestRequest):
     """
     Test skills availability using the provided draft config values
-    (before they are saved). Used by the Settings UI Test button.
+    (before they are saved). Used by the Settings UI Refresh button.
     """
     try:
         override = {}
@@ -210,6 +210,42 @@ def test_ai_skills(req: SkillsTestRequest):
         return get_skills_manifest(config_override=override)
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+class SkillFetchRequest(BaseModel):
+    name:   str
+    source: str   # "bundled:<slug>" | "github:<slug>" | "https://..." | "/path/..." | "file://..."
+
+@app.post("/api/ai/skills/fetch")
+def fetch_ai_skill(req: SkillFetchRequest):
+    """
+    Download/copy a skill from the given source into ~/.avio_skills/<name>/.
+    Returns {ok, path, files, error}.
+    """
+    try:
+        result = fetch_skill(req.name, req.source)
+        if not result["ok"]:
+            raise HTTPException(400, result["error"] or "Fetch failed")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+class SkillDeleteRequest(BaseModel):
+    name: str   # directory name under ~/.avio_skills/
+
+@app.delete("/api/ai/skills/fetch")
+def delete_ai_skill(req: SkillDeleteRequest):
+    """Remove a downloaded skill from ~/.avio_skills/<name>/."""
+    import shutil
+    from sf_skills import USER_SKILLS
+    skill_dir = USER_SKILLS / req.name.strip().replace(" ", "-").lower()
+    if skill_dir.exists():
+        shutil.rmtree(skill_dir)
+    return {"ok": True}
+
 
 # ---------------------------------------------------------------------------
 # Orgs
