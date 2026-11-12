@@ -35,6 +35,8 @@ _HERE       = Path(__file__).resolve().parent
 SKILLS_DIR  = _HERE / "sf_skills"          # default bundled location
 CONFIG_PATH = Path.home() / ".avio_config.json"
 
+GH_RAW_BASE = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main"
+
 # ---------------------------------------------------------------------------
 # Skill file manifest  (relative paths within any skills root directory)
 # ---------------------------------------------------------------------------
@@ -74,12 +76,15 @@ def _load_skills_config() -> dict:
 def _resolve_skills_root(cfg: dict) -> Optional[Path]:
     """
     Return the root Path to read skill files from, based on config.
-    Returns None if the source is 'url' (caller handles HTTP) or unreachable.
+    Returns None if the source uses HTTP (github or url) — caller handles fetch.
     """
     source = cfg.get("source", "bundled")
 
     if source == "bundled":
         return SKILLS_DIR
+
+    if source == "github":
+        return None   # fetched from GitHub raw CDN
 
     if source == "path":
         raw = cfg.get("path") or ""
@@ -94,6 +99,16 @@ def _resolve_skills_root(cfg: dict) -> Optional[Path]:
 
     log.warning("sf_skills: unknown skills_source '%s' — falling back to bundled", source)
     return SKILLS_DIR
+
+
+def _effective_base_url(cfg: dict) -> str:
+    """Return the HTTP base URL for github or url sources. Empty string otherwise."""
+    source = cfg.get("source", "bundled")
+    if source == "github":
+        return GH_RAW_BASE
+    if source == "url":
+        return (cfg.get("url") or "").rstrip("/")
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -174,29 +189,61 @@ def _load_file_url(base_url: str, rel_path: str) -> Optional[str]:
 # Custom skill helpers
 # ---------------------------------------------------------------------------
 
+_GH_RAW_BASE = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main"
+
 def _load_custom_skill_context(entry: dict) -> Optional[str]:
     """
-    Load all markdown files from a custom skill directory.
+    Load all markdown files for a custom skill entry.
     entry = {"name": "...", "path": "/abs/path/to/skill-dir"}
-    The directory should contain SKILL.md and optionally a references/ subdir.
-    Returns a markdown block or None if the path is inaccessible.
+           or {"name": "...", "path": "https://raw.githubusercontent.com/..."}
+           or {"name": "...", "path": "file:///local/path/to/skill-dir"}
+
+    For HTTP(S) paths: fetches SKILL.md and known reference files from the URL base.
+    For local paths (including file:// URLs): reads from the filesystem.
+    Returns a formatted markdown block or None if the source is inaccessible.
     """
     raw_path = (entry.get("path") or "").strip()
     if not raw_path:
         return None
+
+    name = entry.get("name") or raw_path.rstrip("/").split("/")[-1]
+
+    # ── HTTP(S) source ────────────────────────────────────────────────────────
+    if raw_path.startswith("http://") or raw_path.startswith("https://"):
+        base_url = raw_path.rstrip("/")
+        # Always fetch SKILL.md; also try common reference files
+        candidate_paths = ["SKILL.md"]
+        # Probe for a references/ directory by trying known filenames
+        for ref in ["anti-patterns.md", "query-optimization.md", "soql-reference.md",
+                    "best-practices.md", "patterns.md", "reference.md", "guidelines.md"]:
+            candidate_paths.append(f"references/{ref}")
+
+        parts = []
+        for rel in candidate_paths:
+            content = _load_file_url(base_url, rel)
+            if content:
+                parts.append(content)
+        if not parts:
+            log.warning("sf_skills: custom skill URL returned no content: %s", base_url)
+            return None
+        return f"## {name} (custom)\n\n" + "\n\n---\n\n".join(parts)
+
+    # ── file:// URL → strip scheme ────────────────────────────────────────────
+    if raw_path.startswith("file://"):
+        raw_path = raw_path[7:]
+
+    # ── Local filesystem ──────────────────────────────────────────────────────
     root = Path(raw_path).expanduser()
     if not root.is_dir():
         log.warning("sf_skills: custom skill path not found: %s", root)
         return None
 
     parts = []
-    # Load SKILL.md first if present
     skill_md = root / "SKILL.md"
     if skill_md.exists():
         content = _load_file_local(root, "SKILL.md")
         if content:
             parts.append(content)
-    # Then any other .md files (references/, etc.)
     for md in sorted(root.rglob("*.md")):
         if md == skill_md:
             continue
@@ -210,7 +257,6 @@ def _load_custom_skill_context(entry: dict) -> Optional[str]:
 
     if not parts:
         return None
-    name = entry.get("name") or root.name
     return f"## {name} (custom)\n\n" + "\n\n---\n\n".join(parts)
 
 
@@ -252,7 +298,7 @@ def build_skill_context(skills: list[str], cfg: Optional[dict] = None) -> str:
 
     root     = _resolve_skills_root(cfg)
     use_http = (root is None)
-    base_url = (cfg.get("url") or "").rstrip("/") if use_http else ""
+    base_url = _effective_base_url(cfg) if use_http else ""
 
     sections: list[str] = []
     for skill in skills:
@@ -368,8 +414,8 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
             })
             continue
 
-        if cfg.get("source") == "url":
-            available  = bool(cfg.get("url"))  # optimistic — can't probe without fetching
+        if cfg.get("source") in ("url", "github"):
+            available  = True  # optimistic — can't probe without fetching
             file_count = len(files)
         elif root:
             file_count = sum(1 for f in files if (root / f).exists())
@@ -390,13 +436,21 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
     # Append custom skills to catalog
     for entry in (cfg.get("custom_skills") or []):
         raw_path = (entry.get("path") or "").strip()
-        root_p = Path(raw_path).expanduser() if raw_path else None
-        skill_md = (root_p / "SKILL.md") if root_p else None
-        file_count = sum(1 for _ in root_p.rglob("*.md")) if (root_p and root_p.is_dir()) else 0
-        available = bool(skill_md and skill_md.exists())
+        is_url = raw_path.startswith("http://") or raw_path.startswith("https://")
+        if is_url:
+            # Optimistic — we don't probe at manifest time to avoid latency
+            available = True
+            file_count = 1
+        else:
+            fp = raw_path[7:] if raw_path.startswith("file://") else raw_path
+            root_p = Path(fp).expanduser() if fp else None
+            skill_md = (root_p / "SKILL.md") if root_p else None
+            file_count = sum(1 for _ in root_p.rglob("*.md")) if (root_p and root_p.is_dir()) else 0
+            available = bool(skill_md and skill_md.exists())
+        display_name = entry.get("name") or raw_path.rstrip("/").split("/")[-1]
         skills_status.append({
-            "name":        entry.get("name") or (root_p.name if root_p else raw_path),
-            "label":       entry.get("name") or (root_p.name if root_p else raw_path),
+            "name":        display_name,
+            "label":       display_name,
             "description": raw_path,
             "file_count":  file_count,
             "available":   available,
@@ -404,11 +458,12 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
             "custom":      True,
         })
 
+    source = cfg.get("source", "bundled")
     return {
         "enabled":        cfg.get("enabled", True),
-        "source":         cfg.get("source", "bundled"),
+        "source":         source,
         "skills_path":    cfg.get("path") or "",
-        "skills_url":     cfg.get("url") or "",
+        "skills_url":     cfg.get("url") or (GH_RAW_BASE if source == "github" else ""),
         "custom_skills":  cfg.get("custom_skills") or [],
         "version":        version_info,
         "skills":         skills_status,

@@ -951,9 +951,10 @@ export default function App() {
                       disabled={!settingsDraft.skills_enabled}
                       className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-50"
                     >
-                      <option value="bundled">Bundled — shipped with this version of Avio</option>
-                      <option value="path">Local path — internal mirror or network share</option>
-                      <option value="url">Internal URL — internal HTTP skills server</option>
+                      <option value="bundled">Bundled — shipped with this version of Avio (offline)</option>
+                      <option value="github">GitHub — live from forcedotcom/sf-skills (internet required)</option>
+                      <option value="path">Path — local filesystem or network share (airgap)</option>
+                      <option value="url">URL — internal HTTP mirror (airgap)</option>
                     </select>
                   </label>
 
@@ -1056,14 +1057,29 @@ export default function App() {
                     <div className="flex flex-col gap-2 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
                       <input
                         type="text"
-                        placeholder="Skill name (e.g. My SOQL Guide)"
+                        placeholder="Skill name (e.g. Apex Unit Test)"
                         value={addSkillName}
-                        onChange={e => setAddSkillName(e.target.value)}
+                        onChange={e => {
+                          const name = e.target.value;
+                          setAddSkillName(name);
+                          // Auto-fill path with GitHub raw URL if name matches a known upstream skill
+                          const slug = name.trim().toLowerCase().replace(/\s+/g, "-");
+                          const knownSlugs = [
+                            "platform-soql-query","platform-apex-generate","platform-apex-refactor",
+                            "platform-apex-unittest","platform-flows-generate","platform-lwc-generate",
+                            "platform-metadata-retrieve","platform-metadata-deploy","platform-permissions-analyze"
+                          ];
+                          // Check both exact slug match and partial match
+                          const match = knownSlugs.find(s => s === slug || s.includes(slug) || slug.includes(s.replace("platform-","")));
+                          if (match && !addSkillPath) {
+                            setAddSkillPath(`https://raw.githubusercontent.com/forcedotcom/sf-skills/main/${match}`);
+                          }
+                        }}
                         className="border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                       <input
                         type="text"
-                        placeholder="/path/to/skill-directory (must contain SKILL.md)"
+                        placeholder="/path/to/skill-directory  or  https://raw.githubusercontent.com/…"
                         value={addSkillPath}
                         onChange={e => setAddSkillPath(e.target.value)}
                         className="border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
