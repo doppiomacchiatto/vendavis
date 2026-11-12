@@ -408,3 +408,34 @@ def get_platform() -> PlatformProvider:
         else:
             _PROVIDER = LinuxProvider()
     return _PROVIDER
+
+
+# ---------------------------------------------------------------------------
+# Portable data directory
+# ---------------------------------------------------------------------------
+
+def avio_data_dir() -> Path:
+    """
+    Return the platform-appropriate directory for Avio user data.
+
+    Platform conventions:
+      macOS   → ~/.avio/                          (dotdir in home, standard for Mac apps)
+      Windows → %APPDATA%\\Avio\\                 (C:\\Users\\<user>\\AppData\\Roaming\\Avio)
+      Linux   → $XDG_DATA_HOME/avio/              (~/.local/share/avio/ by default)
+
+    The directory is created if it does not exist.
+    All Avio config and data files should live under this directory.
+    """
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
+        d = base / "Avio"
+    elif sys.platform == "darwin":
+        d = Path.home() / ".avio"
+    else:
+        # XDG Base Directory spec
+        xdg = os.environ.get("XDG_DATA_HOME", "")
+        base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+        d = base / "avio"
+    d.mkdir(parents=True, exist_ok=True)
+    return d

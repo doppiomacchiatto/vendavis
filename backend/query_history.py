@@ -4,8 +4,9 @@ query_history.py — SQLite-backed SOQL query history for sf_fls_exporter.
 
 import sqlite3
 from pathlib import Path
+from platform_env import avio_data_dir
 
-_QUERY_HISTORY_DB  = Path.home() / ".sf_tools_query_history.db"
+_QUERY_HISTORY_DB  = avio_data_dir() / "query_history.db"
 _QUERY_HISTORY_MAX = 200   # keep last N queries
 
 

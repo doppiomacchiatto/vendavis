@@ -22,8 +22,9 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from platform_env import avio_data_dir
 
-SNAPSHOT_PATH = Path.home() / ".avio_vr_snapshots.json"
+SNAPSHOT_PATH = avio_data_dir() / "vr_snapshots.json"
 _lock = threading.Lock()
 
 

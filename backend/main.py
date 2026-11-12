@@ -31,8 +31,9 @@ from sf_cli import _sf as _sf_raw   # for raw SOQL
 import vr_snapshot
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
-from ai_client import AIClient, PROVIDER_PRESETS, fetch_models, needs_key, save_config, _load_avio_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config
+from ai_client import AIClient, PROVIDER_PRESETS, fetch_models, needs_key, save_config, _load_avio_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config, API_KEY_PATH
 from sf_skills import augment_system, get_skills_manifest, fetch_skill
+from platform_env import avio_data_dir
 
 app = FastAPI(title="Avio", version="2.0.0")
 
@@ -126,7 +127,7 @@ def get_settings():
         "model":          cfg.get("model", ""),
         "base_url":       effective_url,
         "models":         AVAILABLE_MODELS,
-        "key_source":     "avio" if (Path.home() / ".avio_api_key").exists() else
+        "key_source":     "avio" if API_KEY_PATH.exists() else
                           ("legacy" if legacy.get("api_key") else "none"),
         # Theme
         "theme":          cfg.get("theme", "system"),
@@ -160,7 +161,7 @@ def post_models(req: ModelsRequest):
 def post_settings(req: SettingsRequest):
     # Persist API key to ~/.avio_api_key
     if req.api_key is not None:
-        key_path = Path.home() / ".avio_api_key"
+        key_path = API_KEY_PATH
         if req.api_key.strip():
             key_path.write_text(req.api_key.strip())
         # Blank key = don't overwrite existing

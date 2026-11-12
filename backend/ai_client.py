@@ -20,14 +20,15 @@ from pathlib import Path
 from typing import Generator, Optional
 
 import openai
+from platform_env import avio_data_dir
 
 DEFAULT_MODEL   = "gpt-4o"
 MAX_TOKENS      = 4096
 
-CONFIG_PATH      = Path.home() / ".avio_config.json"
-API_KEY_PATH     = Path.home() / ".avio_api_key"
+CONFIG_PATH      = avio_data_dir() / "config.json"
+API_KEY_PATH     = avio_data_dir() / "api_key"
 OPENCODE_GATEWAY_URL = "https://opencode.ai/inference/openai/v1"
-LEGACY_CFG_PATH  = Path.home() / ".sf_tools_config.json"
+LEGACY_CFG_PATH  = Path.home() / ".sf_tools_config.json"   # legacy — read-only fallback
 
 # opencode.config.json is looked for relative to the project root.
 # In production (bundled app) it can sit next to the binary; in dev it lives
@@ -116,8 +117,10 @@ def _load_api_key() -> str:
         key = API_KEY_PATH.read_text().strip()
         if key:
             return key
-    # 4. legacy ~/.anthropic_key
-    legacy_key_path = Path.home() / ".anthropic_key"
+    # 4. legacy dotfile paths (read-only fallback for existing installs)
+    legacy_key_path = Path.home() / ".avio_api_key"
+    if not legacy_key_path.exists():
+        legacy_key_path = Path.home() / ".anthropic_key"
     if legacy_key_path.exists():
         key = legacy_key_path.read_text().strip()
         if key:

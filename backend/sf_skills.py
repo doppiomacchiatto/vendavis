@@ -33,8 +33,10 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _HERE       = Path(__file__).resolve().parent
 SKILLS_DIR  = _HERE / "sf_skills"          # default bundled location
-CONFIG_PATH  = Path.home() / ".avio_config.json"
-USER_SKILLS  = Path.home() / ".avio_skills"   # downloaded/imported skills live here
+
+from platform_env import avio_data_dir as _avio_data_dir
+CONFIG_PATH  = _avio_data_dir() / "config.json"
+USER_SKILLS  = _avio_data_dir() / "skills"   # downloaded/imported skills live here
 
 GH_RAW_BASE  = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main"
 
