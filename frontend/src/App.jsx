@@ -735,13 +735,15 @@ export default function App() {
       {/* ── Settings modal ───────────────────────────────────────────────────── */}
       {settingsOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm" onClick={() => setSettingsOpen(false)}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 flex flex-col gap-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            {/* Sticky header */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
               <h2 className="text-base font-bold text-gray-800 dark:text-white">AI Settings</h2>
               <button onClick={() => setSettingsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none">✕</button>
             </div>
 
-            <div className="flex flex-col gap-4 text-sm">
+            {/* Scrollable body */}
+            <div className="flex flex-col gap-4 text-sm overflow-y-auto px-6 py-4">
               {/* Provider preset */}
               <label className="flex flex-col gap-1">
                 <span className="font-medium text-gray-700 dark:text-gray-300">Provider</span>
@@ -983,8 +985,8 @@ export default function App() {
               )}
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+            {/* Sticky footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700 shrink-0">
               {settingsSaved === "saved" && (
                 <span className="text-green-500 text-sm font-medium mr-auto">✓ Saved!</span>
               )}
