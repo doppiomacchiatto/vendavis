@@ -32,6 +32,7 @@ import vr_snapshot
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
 from ai_client import AIClient, PROVIDER_PRESETS, fetch_models, needs_key, save_config, _load_avio_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config
+from sf_skills import augment_system, get_skills_manifest
 
 app = FastAPI(title="Avio", version="2.0.0")
 
@@ -94,9 +95,13 @@ AVAILABLE_MODELS = [
 ]
 
 class SettingsRequest(BaseModel):
-    api_key:  Optional[str] = None
-    model:    Optional[str] = None
-    base_url: Optional[str] = None
+    api_key:         Optional[str]  = None
+    model:           Optional[str]  = None
+    base_url:        Optional[str]  = None
+    skills_enabled:  Optional[bool] = None
+    skills_source:   Optional[str]  = None   # "bundled" | "path" | "url"
+    skills_path:     Optional[str]  = None
+    skills_url:      Optional[str]  = None
 
 @app.get("/api/settings")
 def get_settings():
@@ -114,13 +119,18 @@ def get_settings():
     if not needs_key(effective_url):
         key_set = True   # local servers (Ollama etc.) run without a key
     return {
-        "key_set":       key_set,
-        "providers":     PROVIDER_PRESETS,
-        "model":         cfg.get("model", ""),
-        "base_url":      effective_url,
-        "models":        AVAILABLE_MODELS,
-        "key_source":    "avio" if (Path.home() / ".avio_api_key").exists() else
-                         ("legacy" if legacy.get("api_key") else "none"),
+        "key_set":        key_set,
+        "providers":      PROVIDER_PRESETS,
+        "model":          cfg.get("model", ""),
+        "base_url":       effective_url,
+        "models":         AVAILABLE_MODELS,
+        "key_source":     "avio" if (Path.home() / ".avio_api_key").exists() else
+                          ("legacy" if legacy.get("api_key") else "none"),
+        # Skills config
+        "skills_enabled": cfg.get("skills_enabled", True),
+        "skills_source":  cfg.get("skills_source",  "bundled"),
+        "skills_path":    cfg.get("skills_path",    ""),
+        "skills_url":     cfg.get("skills_url",     ""),
     }
 
 class ModelsRequest(BaseModel):
@@ -149,14 +159,30 @@ def post_settings(req: SettingsRequest):
         if req.api_key.strip():
             key_path.write_text(req.api_key.strip())
         # Blank key = don't overwrite existing
-    # Persist model + base_url to config
+    # Persist model + base_url + skills config
     save_config(
         model=req.model or "",
         base_url=req.base_url if req.base_url is not None else "",
+        skills_enabled=req.skills_enabled,
+        skills_source=req.skills_source,
+        skills_path=req.skills_path,
+        skills_url=req.skills_url,
     )
     # Force the AI client to rebuild with new settings on next call
     _ai._client = None
     return {"ok": True}
+
+
+@app.get("/api/ai/skills")
+def get_ai_skills():
+    """
+    Returns the skills manifest: enabled state, source config, version,
+    and per-skill availability. Used by the Settings UI Skills panel.
+    """
+    try:
+        return get_skills_manifest()
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 # ---------------------------------------------------------------------------
 # Orgs
@@ -557,9 +583,10 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/ai/chat")
 def ai_chat(req: ChatRequest):
+    augmented_system = augment_system(req.system, req.messages)
     def _stream():
         try:
-            for chunk in _ai.stream(req.messages, system=req.system, model=req.model or None):
+            for chunk in _ai.stream(req.messages, system=augmented_system, model=req.model or None):
                 yield f"data: {json.dumps({'delta': chunk})}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:

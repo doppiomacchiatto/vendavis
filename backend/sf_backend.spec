@@ -28,7 +28,14 @@ a = Analysis(
     ["main.py"],
     pathex=["."],
     binaries=[],
-    datas=[],
+    datas=[
+        # Bundled Salesforce skill markdown files (forcedotcom/sf-skills)
+        # Destination path must match SKILLS_DIR in sf_skills.py:
+        #   Path(__file__).parent / "sf_skills"
+        # PyInstaller unpacks datas relative to sys._MEIPASS, and __file__
+        # in a frozen build points to sys._MEIPASS, so "sf_skills" is correct.
+        ("sf_skills", "sf_skills"),
+    ],
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],

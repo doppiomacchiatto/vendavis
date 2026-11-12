@@ -110,7 +110,9 @@ export default function App() {
   const [helpTab,       setHelpTab]       = useState("about"); // "about" | "requirements"
 
   const [settingsOpen,  setSettingsOpen]  = useState(false);
-  const [settingsDraft, setSettingsDraft] = useState({ api_key: "", model: "", base_url: "" });
+  const [settingsDraft, setSettingsDraft] = useState({ api_key: "", model: "", base_url: "", skills_enabled: true, skills_source: "bundled", skills_path: "", skills_url: "" });
+  const [skillsTest,    setSkillsTest]    = useState(null);   // null | "testing" | { ok, msg }
+  const [skillsOpen,    setSkillsOpen]    = useState(false);  // skills section expanded
   const [availModels,   setAvailModels]   = useState([]);
   const [providers,     setProviders]     = useState([]);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -123,11 +125,18 @@ export default function App() {
   useEffect(() => {
     if (!settingsOpen) return;
     api("/api/settings").then((d) => {
-      setSettingsDraft({ api_key: "", model: d.model || "", base_url: d.base_url || "" });
+      setSettingsDraft({
+        api_key: "", model: d.model || "", base_url: d.base_url || "",
+        skills_enabled: d.skills_enabled !== false,
+        skills_source:  d.skills_source  || "bundled",
+        skills_path:    d.skills_path    || "",
+        skills_url:     d.skills_url     || "",
+      });
       setAvailModels(d.models || []);
       setProviders(d.providers || []);
       setSettingsKeySet(d.key_set || false);
       setSettingsKeySource(d.key_source || "none");
+      setSkillsTest(null);
       if (d.key_set) refreshModels({ base_url: d.base_url || "" });
     }).catch(() => {});
   }, [settingsOpen]);
@@ -170,12 +179,35 @@ export default function App() {
     try {
       await api("/api/settings", {
         method: "POST",
-        body: JSON.stringify(settingsDraft),
+        body: JSON.stringify({
+          api_key:        settingsDraft.api_key,
+          model:          settingsDraft.model,
+          base_url:       settingsDraft.base_url,
+          skills_enabled: settingsDraft.skills_enabled,
+          skills_source:  settingsDraft.skills_source,
+          skills_path:    settingsDraft.skills_path,
+          skills_url:     settingsDraft.skills_url,
+        }),
       });
       setSettingsSaved("saved");
       setTimeout(() => { setSettingsSaved(""); setSettingsOpen(false); }, 900);
     } catch (e) {
       setSettingsSaved(`error:${e.message}`);
+    }
+  }
+
+  async function testSkillsConnection() {
+    setSkillsTest("testing");
+    try {
+      const d = await api("/api/ai/skills");
+      const active = (d.skills || []).filter(s => s.available);
+      if (active.length === 0) {
+        setSkillsTest({ ok: false, msg: "No skill files found at the configured location." });
+      } else {
+        setSkillsTest({ ok: true, msg: `${active.length} skill${active.length > 1 ? "s" : ""} found: ${active.map(s => s.label).join(", ")}` });
+      }
+    } catch (e) {
+      setSkillsTest({ ok: false, msg: e.message });
     }
   }
 
@@ -550,6 +582,10 @@ export default function App() {
                 <p className="text-xs text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-700 pt-3">
                   Unofficial tool — not affiliated with Salesforce. Read-only by default; no data is modified unless explicitly committed.
                 </p>
+                {/* Easter egg — with gratitude */}
+                <p className="text-xs text-gray-300 dark:text-gray-600 text-center tracking-wide pt-1 select-none" title="with gratitude 🐦">
+                  ✦ Carlos · Tyler · Bruce ✦
+                </p>
               </div>
             )}
 
@@ -783,6 +819,123 @@ export default function App() {
                 </select>
                 {modelsNote && <span className="text-xs text-gray-400">{modelsNote}</span>}
               </label>
+            </div>
+
+            {/* Skills section */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+              {/* Collapsible header */}
+              <button
+                type="button"
+                onClick={() => setSkillsOpen(o => !o)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">🧠 Salesforce Skills</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                    settingsDraft.skills_enabled
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                      : "bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
+                  }`}>
+                    {settingsDraft.skills_enabled ? "On" : "Off"}
+                  </span>
+                </div>
+                <span className="text-gray-400 text-xs">{skillsOpen ? "▲" : "▼"}</span>
+              </button>
+
+              {skillsOpen && (
+                <div className="px-4 py-4 flex flex-col gap-3 text-sm border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                    When enabled, Avio automatically injects official Salesforce guidance (from{" "}
+                    <span className="font-mono text-gray-600 dark:text-gray-300">forcedotcom/sf-skills</span>)
+                    into AI chat responses when it detects SOQL or Apex questions.
+                  </p>
+
+                  {/* Enable / disable toggle */}
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <div
+                      onClick={() => setSettingsDraft(d => ({ ...d, skills_enabled: !d.skills_enabled }))}
+                      className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${
+                        settingsDraft.skills_enabled ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
+                      }`}
+                    >
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                        settingsDraft.skills_enabled ? "translate-x-5" : "translate-x-0.5"
+                      }`} />
+                    </div>
+                    <span className="text-gray-700 dark:text-gray-300 font-medium">
+                      {settingsDraft.skills_enabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </label>
+
+                  {/* Source picker */}
+                  <label className="flex flex-col gap-1">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Source</span>
+                    <select
+                      value={settingsDraft.skills_source}
+                      onChange={e => setSettingsDraft(d => ({ ...d, skills_source: e.target.value }))}
+                      disabled={!settingsDraft.skills_enabled}
+                      className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-50"
+                    >
+                      <option value="bundled">Bundled — shipped with this version of Avio</option>
+                      <option value="path">Local path — internal mirror or network share</option>
+                      <option value="url">Internal URL — internal HTTP skills server</option>
+                    </select>
+                  </label>
+
+                  {/* Path input (shown for "path" source) */}
+                  {settingsDraft.skills_source === "path" && (
+                    <label className="flex flex-col gap-1">
+                      <span className="font-medium text-gray-700 dark:text-gray-300">
+                        Skills directory path
+                        <span className="ml-1 text-xs text-gray-400 font-normal">(root of sf-skills checkout or mirror)</span>
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="/mnt/internal/sf-skills  or  ~/sf-skills"
+                        value={settingsDraft.skills_path}
+                        onChange={e => setSettingsDraft(d => ({ ...d, skills_path: e.target.value }))}
+                        disabled={!settingsDraft.skills_enabled}
+                        className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs disabled:opacity-50"
+                      />
+                    </label>
+                  )}
+
+                  {/* URL input (shown for "url" source) */}
+                  {settingsDraft.skills_source === "url" && (
+                    <label className="flex flex-col gap-1">
+                      <span className="font-medium text-gray-700 dark:text-gray-300">
+                        Internal skills URL
+                        <span className="ml-1 text-xs text-gray-400 font-normal">(root of internal sf-skills HTTP mirror)</span>
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="https://skills.internal.corp/sf-skills"
+                        value={settingsDraft.skills_url}
+                        onChange={e => setSettingsDraft(d => ({ ...d, skills_url: e.target.value }))}
+                        disabled={!settingsDraft.skills_enabled}
+                        className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs disabled:opacity-50"
+                      />
+                    </label>
+                  )}
+
+                  {/* Test connection */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={testSkillsConnection}
+                      disabled={!settingsDraft.skills_enabled || skillsTest === "testing"}
+                      className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors"
+                    >
+                      {skillsTest === "testing" ? "Testing…" : "Test connection"}
+                    </button>
+                    {skillsTest && skillsTest !== "testing" && (
+                      <span className={`text-xs ${skillsTest.ok ? "text-green-600 dark:text-green-400" : "text-red-500"}`}>
+                        {skillsTest.ok ? "✓ " : "✗ "}{skillsTest.msg}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
