@@ -228,6 +228,11 @@ def _load_custom_skill_context(entry: dict) -> Optional[str]:
             return None
         return f"## {name} (custom)\n\n" + "\n\n---\n\n".join(parts)
 
+    # ── bundled: sentinel → resolve to SKILLS_DIR/slug ───────────────────────
+    if raw_path.startswith("bundled:"):
+        slug = raw_path[len("bundled:"):]
+        raw_path = str(SKILLS_DIR / slug)
+
     # ── file:// URL → strip scheme ────────────────────────────────────────────
     if raw_path.startswith("file://"):
         raw_path = raw_path[7:]
@@ -442,7 +447,11 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
             available = True
             file_count = 1
         else:
-            fp = raw_path[7:] if raw_path.startswith("file://") else raw_path
+            fp = raw_path
+            if fp.startswith("bundled:"):
+                fp = str(SKILLS_DIR / fp[len("bundled:"):])
+            elif fp.startswith("file://"):
+                fp = fp[7:]
             root_p = Path(fp).expanduser() if fp else None
             skill_md = (root_p / "SKILL.md") if root_p else None
             file_count = sum(1 for _ in root_p.rglob("*.md")) if (root_p and root_p.is_dir()) else 0

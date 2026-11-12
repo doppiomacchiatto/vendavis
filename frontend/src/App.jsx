@@ -1053,7 +1053,34 @@ export default function App() {
                   )}
 
                   {/* Add skill inline form */}
-                  {addSkillOpen && (
+                  {addSkillOpen && (() => {
+                    const GH_BASE = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main";
+                    const BUNDLED_BASE = "sf_skills";  // display label only — backend resolves real path
+                    const knownSlugs = [
+                      "platform-soql-query","platform-apex-generate","platform-apex-refactor",
+                      "platform-apex-unittest","platform-flows-generate","platform-lwc-generate",
+                      "platform-metadata-retrieve","platform-metadata-deploy","platform-permissions-analyze"
+                    ];
+                    const src = settingsDraft.skills_source;
+
+                    function autoPath(name) {
+                      const slug = name.trim().toLowerCase().replace(/\s+/g, "-");
+                      const match = knownSlugs.find(s => s === slug || s.includes(slug) || slug.includes(s.replace("platform-","")));
+                      if (!match) return "";
+                      if (src === "github") return `${GH_BASE}/${match}`;
+                      if (src === "bundled") return `bundled:${match}`;  // sentinel — backend maps to SKILLS_DIR/match
+                      return "";  // path/url: user types it
+                    }
+
+                    const pathPlaceholder =
+                      src === "github"  ? `${GH_BASE}/platform-apex-unittest` :
+                      src === "bundled" ? "Auto-filled from bundled skills directory" :
+                      src === "url"     ? "https://skills.internal.corp/sf-skills/platform-apex-unittest" :
+                                         "/mnt/internal/sf-skills/platform-apex-unittest";
+
+                    const pathReadOnly = src === "bundled";
+
+                    return (
                     <div className="flex flex-col gap-2 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
                       <input
                         type="text"
@@ -1062,27 +1089,18 @@ export default function App() {
                         onChange={e => {
                           const name = e.target.value;
                           setAddSkillName(name);
-                          // Auto-fill path with GitHub raw URL if name matches a known upstream skill
-                          const slug = name.trim().toLowerCase().replace(/\s+/g, "-");
-                          const knownSlugs = [
-                            "platform-soql-query","platform-apex-generate","platform-apex-refactor",
-                            "platform-apex-unittest","platform-flows-generate","platform-lwc-generate",
-                            "platform-metadata-retrieve","platform-metadata-deploy","platform-permissions-analyze"
-                          ];
-                          // Check both exact slug match and partial match
-                          const match = knownSlugs.find(s => s === slug || s.includes(slug) || slug.includes(s.replace("platform-","")));
-                          if (match && !addSkillPath) {
-                            setAddSkillPath(`https://raw.githubusercontent.com/forcedotcom/sf-skills/main/${match}`);
-                          }
+                          const p = autoPath(name);
+                          if (p) setAddSkillPath(p);
                         }}
                         className="border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                       <input
                         type="text"
-                        placeholder="/path/to/skill-directory  or  https://raw.githubusercontent.com/…"
+                        placeholder={pathPlaceholder}
                         value={addSkillPath}
-                        onChange={e => setAddSkillPath(e.target.value)}
-                        className="border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        readOnly={pathReadOnly}
+                        onChange={e => !pathReadOnly && setAddSkillPath(e.target.value)}
+                        className={`border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${pathReadOnly ? "opacity-60 cursor-default" : ""}`}
                       />
                       <div className="flex gap-2 justify-end">
                         <button
@@ -1102,7 +1120,8 @@ export default function App() {
                         >Add</button>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 {/* Scrollable skills list */}
