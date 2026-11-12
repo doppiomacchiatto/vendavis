@@ -78,6 +78,7 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
     setLoadingFld(true);
     setFields([]);
     setVrRules([]);
+    setVrSnapshot(null);
     setVrOpen(false);
     log(`Loading fields for ${obj.label} (${obj.apiName})…`);
     try {
@@ -102,12 +103,42 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
     log(`Loading validation rules for ${obj.label}…`);
     try {
       const d = await api(`/api/orgs/${org.alias}/objects/${obj.apiName}/validation-rules`);
-      setVrRules(d.rules || []);
-      log(`${(d.rules || []).length} validation rule(s) loaded for ${obj.label}`, "success");
+      const rules = d.rules || [];
+      setVrRules(rules);
+      log(`${rules.length} validation rule(s) loaded for ${obj.label}`, "success");
+      await loadVrSnapshot(obj, rules);
     } catch (e) {
       log(`Validation rules error: ${e.message}`, "error");
     } finally {
       setVrLoading(false);
+    }
+  }
+
+  // ── Bulk-disable restore snapshot (persisted by the backend as JSON) ─────────
+  const vrSnapshotUrl = (obj) => `/api/orgs/${org.alias}/objects/${obj.apiName}/validation-rules/snapshot`;
+
+  async function saveVrSnapshot(obj, names) {
+    await api(vrSnapshotUrl(obj), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules: names }),
+    });
+  }
+
+  // Load the saved snapshot, keeping only rules that still exist and are still off.
+  // If nothing is left to restore (e.g. re-enabled in Setup), clear the saved file.
+  async function loadVrSnapshot(obj, rules) {
+    try {
+      const d = await api(vrSnapshotUrl(obj));
+      const saved = d.snapshot?.rules || [];
+      if (saved.length === 0) { setVrSnapshot(null); return; }
+      const offNames = new Set(rules.filter(r => !r.active).map(r => r.name));
+      const pending = saved.filter(n => offNames.has(n));
+      if (pending.length !== saved.length) await saveVrSnapshot(obj, pending);
+      setVrSnapshot(pending.length ? pending : null);
+      if (pending.length) log(`Restore snapshot found: ${pending.length} rule(s) were disabled by Disable All (saved ${d.snapshot.savedAt})`);
+    } catch (e) {
+      log(`Could not read restore snapshot: ${e.message}`, "error");
     }
   }
 
@@ -135,20 +166,33 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
 
   // ── Bulk VR toggle ───────────────────────────────────────────────────────────
   async function bulkToggleVR(targetActive) {
+    const obj = selectedObj;
     const toToggle = targetActive
-      ? vrRules.filter(r => !r.active && vrSnapshot?.includes(r.name))  // restore snapshot
-      : vrRules.filter(r => r.active);                                   // disable all active
+      ? vrRules.filter(r => !r.active && (!vrSnapshot || vrSnapshot.includes(r.name)))  // restore snapshot (or Enable All)
+      : vrRules.filter(r => r.active);                                                    // disable all active
 
     if (toToggle.length === 0) return;
 
-    // Save snapshot before disabling so restore is exact
-    if (!targetActive) setVrSnapshot(vrRules.filter(r => r.active).map(r => r.name));
+    // Persist the snapshot BEFORE disabling anything, so Restore survives switching
+    // objects/tabs and app restarts. Merge with any rules still waiting to be restored.
+    // If it can't be saved, don't disable anything.
+    if (!targetActive) {
+      const names = [...new Set([...(vrSnapshot || []), ...toToggle.map(r => r.name)])];
+      try {
+        await saveVrSnapshot(obj, names);
+      } catch (e) {
+        log(`Could not save the restore snapshot, nothing was disabled: ${e.message}`, "error");
+        return;
+      }
+      setVrSnapshot(names);
+    }
 
     setVrBulkBusy(true);
     const action = targetActive ? "Enabling" : "Disabling";
     log(`${action} ${toToggle.length} validation rule(s) on ${selectedObj.label}…`);
 
     let failed = 0;
+    const failedNames = [];
     for (const rule of toToggle) {
       setVrToggling(rule.name);
       try {
@@ -162,12 +206,18 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
       } catch (e) {
         log(`"${rule.name}" failed: ${e.message}`, "error");
         failed++;
+        failedNames.push(rule.name);
       }
     }
 
     setVrToggling(null);
     setVrBulkBusy(false);
-    if (targetActive) setVrSnapshot(null);  // clear snapshot after restore
+    if (targetActive) {
+      // Keep only the rules that failed to restore, so they can be retried
+      try { await saveVrSnapshot(obj, failedNames); }
+      catch (e) { log(`Could not update restore snapshot: ${e.message}`, "error"); }
+      setVrSnapshot(failedNames.length ? failedNames : null);
+    }
     const ok = toToggle.length - failed;
     log(`Bulk ${targetActive ? "enable" : "disable"} complete — ${ok}/${toToggle.length} succeeded`, failed ? "error" : "success");
   }
