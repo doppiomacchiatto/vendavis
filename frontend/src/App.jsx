@@ -734,8 +734,8 @@ export default function App() {
 
       {/* ── Settings modal ───────────────────────────────────────────────────── */}
       {settingsOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm" onClick={() => setSettingsOpen(false)}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-stretch justify-center z-50 backdrop-blur-sm py-8 px-4" onClick={() => setSettingsOpen(false)}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Sticky header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
               <h2 className="text-base font-bold text-gray-800 dark:text-white">AI Settings</h2>
@@ -743,7 +743,7 @@ export default function App() {
             </div>
 
             {/* Scrollable body */}
-            <div className="flex flex-col gap-4 text-sm overflow-y-auto px-6 py-4">
+            <div className="flex flex-col gap-4 text-sm overflow-y-auto px-6 py-4 flex-1 min-h-0">
               {/* Provider preset */}
               <label className="flex flex-col gap-1">
                 <span className="font-medium text-gray-700 dark:text-gray-300">Provider</span>
@@ -955,7 +955,7 @@ export default function App() {
                         </p>
                       )}
                       {/* Scrollable skill cards — shows ~3 cards, scroll for the rest */}
-                      <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                      <div className="flex flex-col gap-2">
                         {skillsTest.skills.map(s => (
                           <div key={s.name} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs ${
                             s.available
