@@ -954,31 +954,34 @@ export default function App() {
                           {skillsTest.version.date && ` · ${skillsTest.version.date}`}
                         </p>
                       )}
-                      {skillsTest.skills.map(s => (
-                        <div key={s.name} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs ${
-                          s.available
-                            ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
-                            : s.bundled === false
-                              ? "bg-white dark:bg-gray-900 border-dashed border-gray-200 dark:border-gray-700 opacity-50"
-                              : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60"
-                        }`}>
-                          <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
-                            s.available ? "bg-green-500" : s.bundled === false ? "bg-gray-300" : "bg-gray-400"
-                          }`} />
-                          <div className="flex flex-col gap-0.5 min-w-0">
-                            <span className="font-semibold text-gray-800 dark:text-gray-200">{s.label}</span>
-                            <span className="text-gray-500 dark:text-gray-400 leading-snug">{s.description}</span>
-                          </div>
-                          <span className="ml-auto shrink-0 font-mono text-gray-400 dark:text-gray-500">
-                            {s.available
-                              ? `${s.file_count} file${s.file_count !== 1 ? "s" : ""}`
+                      {/* Scrollable skill cards — shows ~3 cards, scroll for the rest */}
+                      <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                        {skillsTest.skills.map(s => (
+                          <div key={s.name} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs ${
+                            s.available
+                              ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
                               : s.bundled === false
-                                ? <span className="italic text-gray-300 dark:text-gray-600 font-sans">coming soon</span>
-                                : <span className="italic">not found</span>
-                            }
-                          </span>
-                        </div>
-                      ))}
+                                ? "bg-white dark:bg-gray-900 border-dashed border-gray-200 dark:border-gray-700 opacity-50"
+                                : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60"
+                          }`}>
+                            <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
+                              s.available ? "bg-green-500" : s.bundled === false ? "bg-gray-300" : "bg-gray-400"
+                            }`} />
+                            <div className="flex flex-col gap-0.5 min-w-0">
+                              <span className="font-semibold text-gray-800 dark:text-gray-200">{s.label}</span>
+                              <span className="text-gray-500 dark:text-gray-400 leading-snug">{s.description}</span>
+                            </div>
+                            <span className="ml-auto shrink-0 font-mono text-gray-400 dark:text-gray-500">
+                              {s.available
+                                ? `${s.file_count} file${s.file_count !== 1 ? "s" : ""}`
+                                : s.bundled === false
+                                  ? <span className="italic text-gray-300 dark:text-gray-600 font-sans">coming soon</span>
+                                  : <span className="italic">not found</span>
+                              }
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
