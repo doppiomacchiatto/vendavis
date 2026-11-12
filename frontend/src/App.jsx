@@ -112,7 +112,7 @@ export default function App() {
   const [settingsOpen,  setSettingsOpen]  = useState(false);
   const [settingsDraft, setSettingsDraft] = useState({ api_key: "", model: "", base_url: "", skills_enabled: true, skills_source: "bundled", skills_path: "", skills_url: "" });
   const [skillsTest,    setSkillsTest]    = useState(null);   // null | "testing" | { ok, msg, skills, version }
-  const [skillsOpen,    setSkillsOpen]    = useState(false);  // skills section expanded
+  const [settingsTab,   setSettingsTab]   = useState("model"); // "model" | "skills"
   const [availModels,   setAvailModels]   = useState([]);
   const [providers,     setProviders]     = useState([]);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -137,6 +137,7 @@ export default function App() {
       setSettingsKeySet(d.key_set || false);
       setSettingsKeySource(d.key_source || "none");
       setSkillsTest(null);
+      setSettingsTab("model");
       if (d.key_set) refreshModels({ base_url: d.base_url || "" });
     }).catch(() => {});
   }, [settingsOpen]);
@@ -747,9 +748,9 @@ export default function App() {
                 {[["model", "AI Model"], ["skills", "🧠 Skills"]].map(([id, label]) => (
                   <button
                     key={id}
-                    onClick={() => setSkillsOpen(id === "skills")}
+                    onClick={() => setSettingsTab(id)}
                     className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
-                      (id === "skills") === skillsOpen
+                      settingsTab === id
                         ? "border-blue-600 text-blue-600 dark:text-blue-400"
                         : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                     }`}
@@ -770,7 +771,7 @@ export default function App() {
             </div>
 
             {/* Tab: AI Model */}
-            {!skillsOpen && (
+            {settingsTab === "model" && (
               <div className="flex flex-col gap-4 text-sm px-6 py-5 overflow-y-auto flex-1 min-h-0">
                 <label className="flex flex-col gap-1">
                   <span className="font-medium text-gray-700 dark:text-gray-300">Provider</span>
@@ -855,7 +856,7 @@ export default function App() {
             )}
 
             {/* Tab: Skills */}
-            {skillsOpen && (
+            {settingsTab === "skills" && (
               <div className="flex flex-col text-sm px-6 py-5 flex-1 min-h-0 overflow-hidden">
                 {/* Fixed controls */}
                 <div className="flex flex-col gap-3 shrink-0">
@@ -1012,19 +1013,19 @@ export default function App() {
               {settingsSaved.startsWith("error:") && (
                 <span className="text-red-500 text-xs mr-auto">{settingsSaved.slice(6)}</span>
               )}
-              {!skillsOpen && (
+              {settingsTab === "model" && (
                 <span className="text-xs text-gray-400 mr-auto italic">Switch to Skills tab to save changes</span>
               )}
               <button
                 onClick={() => setSettingsOpen(false)}
-                disabled={!skillsOpen}
+                disabled={settingsTab !== "skills"}
                 className="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
                 Cancel
               </button>
               <button
                 onClick={saveSettings}
-                disabled={!skillsOpen}
+                disabled={settingsTab !== "skills"}
                 className="px-5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
               >
                 Save
