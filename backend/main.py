@@ -25,8 +25,10 @@ from sf_cli import (list_orgs, list_objects, describe_object, run_apex_anonymous
                     list_profiles, list_permission_sets,
                     get_fls_for_profile, get_object_perms_for_profile,
                     get_fls_for_permset, get_object_perms_for_permset,
-                    get_org_limits, get_validation_rules, toggle_validation_rule)
+                    get_org_limits, get_validation_rules, toggle_validation_rule,
+                    sf_rest_request, get_security_settings)
 from sf_cli import _sf as _sf_raw   # for raw SOQL
+import vr_snapshot
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
 from ai_client import AIClient, PROVIDER_PRESETS, fetch_models, needs_key, save_config, _load_vendavis_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config
@@ -196,12 +198,17 @@ def get_fields(alias: str, object_api: str):
                 "type":     f.get("type", ""),
                 "readable": f.get("filterable", True),
                 "editable": not f.get("calculated", False) and not f.get("autoNumber", False),
-                # required on create: field must be supplied when creating a record
-                # (createable=True, nillable=False, not system-defaulted on insert)
+                # required on create: Salesforce will reject a blank value at save time.
+                #   1. nillable=False  - SF enforces non-null at the API level
+                #   2. nameField=True  - the primary name field (e.g. Account.Name) is
+                #      always required even when SF marks it nillable (e.g. on
+                #      PersonAccount-enabled orgs, compound switchablepersonname).
+                # Gated on createable so system fields (Id, CreatedDate, ...) are excluded.
                 "required": (
-                    f.get("createable", False) and
-                    not f.get("nillable", True) and
-                    not f.get("defaultedOnCreate", False)
+                    f.get("createable", False) and (
+                        not f.get("nillable", True) or
+                        f.get("nameField", False)
+                    )
                 ),
             }
             for f in raw_fields
@@ -218,6 +225,24 @@ def get_vr(alias: str, object_api: str):
         return {"rules": rules}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+class VRSnapshotRequest(BaseModel):
+    rules: list[str]   # empty list clears the snapshot
+
+
+@app.get("/api/orgs/{alias}/objects/{object_api}/validation-rules/snapshot")
+def get_vr_snapshot(alias: str, object_api: str):
+    """Rules that were active before the last bulk Disable All (survives restarts)."""
+    return {"snapshot": vr_snapshot.get_snapshot(alias, object_api)}
+
+
+@app.post("/api/orgs/{alias}/objects/{object_api}/validation-rules/snapshot")
+def save_vr_snapshot(alias: str, object_api: str, body: VRSnapshotRequest):
+    try:
+        return {"snapshot": vr_snapshot.save_snapshot(alias, object_api, body.rules)}
+    except Exception as e:
+        raise HTTPException(500, f"Could not save the restore snapshot: {e}")
 
 
 class ToggleVRRequest(BaseModel):
@@ -271,6 +296,37 @@ def get_permset_fls(alias: str, permset_name: str, object_api: str):
         return {"obj_perms": obj_perms, "fls": fls}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+# ---------------------------------------------------------------------------
+# REST Explorer proxy
+# ---------------------------------------------------------------------------
+
+class RestProxyRequest(BaseModel):
+    method: str = "GET"
+    path:   str
+    body:   Optional[str] = None   # JSON string, only for POST/PUT/PATCH
+
+
+@app.post("/api/orgs/{alias}/rest")
+def rest_proxy(alias: str, req: RestProxyRequest):
+    try:
+        return sf_rest_request(alias, req.method, req.path, req.body)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ---------------------------------------------------------------------------
+# Security settings (Health tab)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/orgs/{alias}/security-settings")
+def security_settings(alias: str):
+    """Retrieve SecuritySettings + NetworkAccess metadata and return a parsed dict."""
+    try:
+        return get_security_settings(alias)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
 
 # ---------------------------------------------------------------------------
 # Org limits
@@ -570,7 +626,7 @@ def sf_version():
     try:
         result = subprocess.run(
             [sf_bin, "version", "--json"],
-            timeout=15, env=env, **SUBPROCESS_KWARGS
+            timeout=60, env=env, **SUBPROCESS_KWARGS
         )
         clean = _re.sub(r'\x1b\[[0-9;]*m', '', result.stdout).strip()
         try:
@@ -580,7 +636,7 @@ def sf_version():
             version_str = clean or result.stderr.strip() or "unknown"
         return {"sf_bin": sf_bin, "version": version_str}
     except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=503, detail="sf version check timed out")
+        raise HTTPException(status_code=504, detail="sf version check timed out")
 
 # ---------------------------------------------------------------------------
 # Entry point
