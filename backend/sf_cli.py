@@ -8,11 +8,20 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from platform_env import get_platform
 
 SF_CLI = None   # resolved lazily on first call
+
+# VENDAVIS_DEBUG=1 prints timing for every sf CLI call and the Load Objects path
+DEBUG = os.environ.get("VENDAVIS_DEBUG", "").lower() in ("1", "true", "yes")
+
+
+def _debug(msg: str) -> None:
+    if DEBUG:
+        print(f"[sf_cli] {msg}", flush=True)
 
 
 def _augmented_path() -> str:
@@ -35,15 +44,20 @@ def _find_sf_cli():
     )
 
 
-def _sf(*args, timeout=120):
-    """Run an sf/sfdx command and return parsed JSON output."""
+def _sf(*args, timeout=120, cwd=None):
+    """Run an sf/sfdx command and return parsed JSON output.
+
+    cwd: directory to run in (needed for commands that require an sfdx-project.json).
+    """
     global SF_CLI
     if SF_CLI is None:
         SF_CLI = _find_sf_cli()
 
     cmd = [SF_CLI, *args, "--json"]
     env = {**os.environ, "PATH": _augmented_path()}
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+    t0 = time.time()
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env, cwd=cwd)
+    _debug(f"sf {' '.join(args)[:200]} -> rc={result.returncode} ({time.time()-t0:.1f}s)")
 
     import re as _re
     # Strip ANSI color codes before parsing
@@ -150,12 +164,64 @@ def list_orgs():
     return unique
 
 
+def _rest_get(target_org: str, path: str, timeout: int = 60):
+    """GET a REST path (e.g. '/sobjects') under /services/data/vXX.0 using the CLI's auth."""
+    import urllib.request
+    import urllib.error
+
+    info = _sf("org", "display", "--target-org", target_org).get("result", {})
+    instance_url = info.get("instanceUrl") or ""
+    api_version = info.get("apiVersion") or "68.0"
+
+    def _fetch():
+        tok = _sf("org", "auth", "show-access-token", "--target-org", target_org).get("result", {})
+        access_token = tok.get("accessToken") or tok.get("access_token")
+        if not access_token or not instance_url:
+            raise RuntimeError("Could not retrieve access token or instance URL")
+        req = urllib.request.Request(
+            f"{instance_url}/services/data/v{api_version}{path}",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        return _fetch()
+    except urllib.error.HTTPError as e:
+        if e.code != 401:
+            raise
+    # Expired access token: any CLI API call refreshes it
+    _sf("data", "query", "--target-org", target_org, "--query", "SELECT Id FROM Organization LIMIT 1")
+    try:
+        return _fetch()
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise RuntimeError(
+                f"Session for '{target_org}' has expired. Run: sf org login web --alias {target_org}"
+            )
+        raise
+
+
 def list_objects(target_org):
     """Return sorted list of (api_name, label) tuples for all objects.
 
-    Uses EntityDefinition SOQL — works with all CLI versions.
-    EntityDefinition has a max SOQL limit; we page through with OFFSET.
+    Fast path: one REST describe-global call. Falls back to paging
+    EntityDefinition via the CLI (one process per 200 rows, slow on big orgs).
     """
+    try:
+        t0 = time.time()
+        data = _rest_get(target_org, "/sobjects")
+        pairs = {
+            o["name"]: (o.get("label") or o["name"]).strip()
+            for o in data.get("sobjects", [])
+            if o.get("name") and o.get("retrieveable", True)
+        }
+        _debug(f"list_objects: {len(pairs)} objects via REST ({time.time()-t0:.1f}s)")
+        if pairs:
+            return sorted(pairs.items(), key=lambda x: x[1])
+    except Exception as e:
+        _debug(f"list_objects: REST path failed ({e!r}), falling back to EntityDefinition paging")
+
     names = {}
     offset = 0
     batch  = 200   # EntityDefinition supports up to 200 per query
@@ -602,98 +668,129 @@ def _get_auth(target_org: str):
     return instance_url, api_version, access_token
 
 
+def _soql_quote(value: str) -> str:
+    """Escape a value for use inside a single-quoted SOQL string literal."""
+    return str(value).replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _tooling_request(instance_url: str, access_token: str, method: str, path: str,
+                     body=None, timeout: int = 30):
+    """Tooling API call. Returns parsed JSON (None for an empty 204 response).
+
+    Raises RuntimeError with Salesforce's error text on any HTTP error.
+    """
+    import urllib.request, urllib.error
+
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(f"{instance_url}{path}", data=data, method=method)
+    req.add_header("Authorization", f"Bearer {access_token}")
+    req.add_header("Accept", "application/json")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Tooling API error {e.code}: {e.read().decode('utf-8', 'replace')[:500]}")
+    return json.loads(raw) if raw else None
+
+
+def _vr_query(instance_url: str, api_version: str, access_token: str,
+              object_api: str, rule_name: str | None = None) -> list:
+    """List ValidationRule rows for an object (optionally one rule by name).
+
+    The formula is NOT a queryable column; it only exists in the record's Metadata.
+    """
+    import urllib.parse
+    soql = (
+        "SELECT Id, Active, ValidationName, ErrorDisplayField, ErrorMessage, Description "
+        f"FROM ValidationRule WHERE EntityDefinition.QualifiedApiName = '{_soql_quote(object_api)}' "
+    )
+    if rule_name:
+        soql += f"AND ValidationName = '{_soql_quote(rule_name)}' "
+    soql += "ORDER BY ValidationName"
+    data = _tooling_request(
+        instance_url, access_token, "GET",
+        f"/services/data/v{api_version}/tooling/query?q={urllib.parse.quote(soql)}",
+        timeout=20,
+    )
+    return (data or {}).get("records", [])
+
+
 def get_validation_rules(target_org: str, object_api: str) -> list:
     """Fetch all validation rules for an object via the Tooling API.
 
     Returns a list of dicts:
       { id, name, active, errorField, errorConditionFormula, errorMessage, description }
     """
-    import urllib.request, urllib.error
+    from concurrent.futures import ThreadPoolExecutor
+
     instance_url, api_version, access_token = _get_auth(target_org)
+    records = _vr_query(instance_url, api_version, access_token, object_api)
 
-    import urllib.parse
-    soql = (
-        "SELECT Id, Active, ValidationName, ErrorDisplayField, "
-        "ErrorConditionFormula, ErrorMessage, Description "
-        f"FROM ValidationRule WHERE EntityDefinition.QualifiedApiName = '{object_api}' "
-        "ORDER BY ValidationName"
-    )
-    url = (
-        f"{instance_url}/services/data/v{api_version}/tooling/query"
-        f"?q={urllib.parse.quote(soql)}"
-    )
-    req = urllib.request.Request(
-        url,
-        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Tooling API error {e.code}: {e.read().decode()[:300]}")
+    def formula_for(rec_id: str) -> str:
+        try:
+            full = _tooling_request(
+                instance_url, access_token, "GET",
+                f"/services/data/v{api_version}/tooling/sobjects/ValidationRule/{rec_id}",
+            )
+            return ((full or {}).get("Metadata") or {}).get("errorConditionFormula") or ""
+        except Exception:
+            return ""
 
-    rules = []
-    for r in data.get("records", []):
-        rules.append({
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        formulas = list(pool.map(lambda r: formula_for(r.get("Id", "")), records))
+
+    return [
+        {
             "id":                    r.get("Id", ""),
             "name":                  r.get("ValidationName", ""),
             "active":                r.get("Active", False),
             "errorField":            r.get("ErrorDisplayField") or "",
-            "errorConditionFormula": r.get("ErrorConditionFormula") or "",
+            "errorConditionFormula": formula,
             "errorMessage":          r.get("ErrorMessage") or "",
             "description":           r.get("Description") or "",
-        })
-    return rules
+        }
+        for r, formula in zip(records, formulas)
+    ]
 
 
 def toggle_validation_rule(target_org: str, object_api: str, rule_name: str, active: bool) -> None:
-    """Enable or disable a validation rule by deploying a minimal Metadata XML.
+    """Enable or disable a validation rule, changing ONLY its `active` flag.
 
-    Uses a temp directory so that `sf project deploy start` has the required
-    sfdx-project.json and objects/ structure.
+    Reads the rule's full current definition (the Tooling API record's Metadata),
+    flips `active`, and writes the whole definition back, so the formula, error
+    message, error field and description are preserved exactly. (Deploying a
+    stub rule would overwrite them.) The change is re-read afterwards to confirm.
     """
-    import shutil
+    instance_url, api_version, access_token = _get_auth(target_org)
+    base = f"/services/data/v{api_version}/tooling/sobjects/ValidationRule"
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
+    records = _vr_query(instance_url, api_version, access_token, object_api, rule_name)
+    if not records:
+        raise RuntimeError(f"Validation rule '{rule_name}' not found on {object_api}")
+    rule_id = records[0]["Id"]
 
-        # sfdx-project.json — minimal, required for the deploy command
-        (tmp / "sfdx-project.json").write_text(json.dumps({
-            "packageDirectories": [{"path": "force-app", "default": True}],
-            "namespace": "",
-            "sourceApiVersion": "68.0",
-        }))
-
-        # force-app/main/default/objects/{Object}/validationRules/
-        vr_dir = tmp / "force-app" / "main" / "default" / "objects" / object_api / "validationRules"
-        vr_dir.mkdir(parents=True)
-
-        active_str = "true" if active else "false"
-        xml = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">\n'
-            f'    <fullName>{rule_name}</fullName>\n'
-            f'    <active>{active_str}</active>\n'
-            f'    <errorConditionFormula>true</errorConditionFormula>\n'
-            f'    <errorMessage>placeholder</errorMessage>\n'
-            '</ValidationRule>\n'
+    record   = _tooling_request(instance_url, access_token, "GET", f"{base}/{rule_id}") or {}
+    metadata = record.get("Metadata")
+    if not isinstance(metadata, dict) or not metadata.get("errorConditionFormula"):
+        raise RuntimeError(
+            f"Refusing to change '{rule_name}': could not read its current definition"
         )
-        (vr_dir / f"{rule_name}.validationRule-meta.xml").write_text(xml)
+    if bool(metadata.get("active")) == active:
+        return  # already in the requested state
 
-        # Deploy — wait for completion (--wait 10 minutes max)
-        result = _sf(
-            "project", "deploy", "start",
-            "--source-dir", str(tmp / "force-app"),
-            "--target-org", target_org,
-            "--wait", "10",
-            timeout=660,
-        )
-        status = (result.get("result") or {}).get("status", "")
-        if status not in ("Succeeded", "SucceededPartial", ""):
-            errors = (result.get("result") or {}).get("details", {}).get("componentFailures", [])
-            msg = "; ".join(e.get("problem", "") for e in errors) if errors else str(result)
-            raise RuntimeError(f"Deploy failed ({status}): {msg}")
+    new_metadata = {k: v for k, v in metadata.items() if v is not None}
+    new_metadata["active"] = active
+    _tooling_request(instance_url, access_token, "PATCH", f"{base}/{rule_id}",
+                     body={"Metadata": new_metadata})
 
+    check = _tooling_request(instance_url, access_token, "GET", f"{base}/{rule_id}") or {}
+    after = (check.get("Metadata") or {})
+    if bool(after.get("active")) != active:
+        raise RuntimeError(f"Update of '{rule_name}' was not applied (still active={after.get('active')})")
+    if after.get("errorConditionFormula") != metadata.get("errorConditionFormula"):
+        raise RuntimeError(f"Formula of '{rule_name}' changed unexpectedly after update")
 
 # ---------------------------------------------------------------------------
 # REST Explorer proxy
@@ -751,44 +848,68 @@ def sf_rest_request(target_org: str, method: str, path: str, body: str = None) -
 # ---------------------------------------------------------------------------
 
 def get_security_settings(target_org: str) -> dict:
-    """Retrieve SecuritySettings and NetworkAccess metadata and parse into a dict.
+    """Retrieve the org's Security settings and return the values the Health tab uses.
+
+    Retrieves the `Settings:Security` metadata (settings/Security.settings-meta.xml)
+    into a throw-away temp directory and parses it. Nothing is kept on disk.
 
     Returns:
     {
-      "passwordPolicies": { minimumPasswordLength, complexity, expiration,
-                            maxLoginAttempts, lockoutInterval,
-                            minimumPasswordLifetime, obscure },
-      "sessionSettings":  { sessionTimeout, forceRelogin, requireHttps,
-                            clickjackProtectionHeader, enforceIpRangesEveryRequest,
-                            lockSessionsToDomain },
+      "passwordPolicies":    { minimumPasswordLength, complexity, expiration,
+                               maxLoginAttempts, lockoutInterval, ... },
+      "sessionSettings":     { sessionTimeout, forceRelogin, requireHttps,
+                               enforceIpRangesEveryRequest, lockSessionsToDomain, ... },
       "loginAccessPolicies": { administratorsCanLogInAsAny },
-      "ipRanges": [ { start, end, description }, … ]   # from NetworkAccess
+      "ipRanges": [ { start, end, description }, ... ]
     }
+    Values are the raw strings from the XML ("true"/"false", enum names).
     """
     import xml.etree.ElementTree as ET
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # ignore_cleanup_errors: on Windows the CLI can still hold the directory as its
+    # cwd when we delete it; the result is already parsed by then.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         tmp = Path(tmpdir)
 
-        # Minimal sfdx-project.json
+        # Minimal sfdx-project.json. The retrieve target must NOT overlap a package
+        # directory, so the output goes to a separate "retrieved" folder.
         (tmp / "sfdx-project.json").write_text(json.dumps({
             "packageDirectories": [{"path": "force-app", "default": True}],
             "namespace": "",
             "sourceApiVersion": "68.0",
         }))
-        output_dir = tmp / "force-app"
+        (tmp / "force-app").mkdir()
+        output_dir = tmp / "retrieved"
         output_dir.mkdir()
 
-        # Retrieve both metadata types
-        _sf(
+        resp = _sf(
             "project", "retrieve", "start",
-            "--metadata", "SecuritySettings",
-            "--metadata", "NetworkAccess",
+            "--metadata", "Settings:Security",
             "--target-org", target_org,
             "--output-dir", str(output_dir),
             "--wait", "5",
             timeout=360,
+            cwd=str(tmp),
         )
+        # _sf() returns CLI error JSON instead of raising, so check it here.
+        if isinstance(resp, dict) and resp.get("status") not in (0, None):
+            raise RuntimeError(
+                f"Security settings retrieve failed: {resp.get('name', '')} {resp.get('message', '')}".strip()
+            )
+
+        files = list(output_dir.rglob("Security.settings-meta.xml"))
+        if not files:
+            raise RuntimeError("Security settings retrieve returned no Security.settings-meta.xml")
+
+        root = ET.parse(files[0]).getroot()
+        ns   = root.tag.split("}")[0].lstrip("{") if "}" in root.tag else ""
+
+        def tag(name):
+            return f"{{{ns}}}{name}" if ns else name
+
+        def child_text(parent, name):
+            el = parent.find(tag(name)) if parent is not None else None
+            return el.text if el is not None else None
 
         result = {
             "passwordPolicies":    {},
@@ -797,55 +918,33 @@ def get_security_settings(target_org: str) -> dict:
             "ipRanges":            [],
         }
 
-        # Parse SecuritySettings XML
-        ss_files = list(output_dir.rglob("*SecuritySettings*settings-meta.xml"))
-        if not ss_files:
-            ss_files = list(output_dir.rglob("*.settings-meta.xml"))
-            ss_files = [f for f in ss_files if "Security" in f.name]
-        if ss_files:
-            tree = ET.parse(ss_files[0])
-            root = tree.getroot()
-            ns   = root.tag.split("}")[0].lstrip("{") if "}" in root.tag else ""
-            def tag(name): return f"{{{ns}}}{name}" if ns else name
+        pp = root.find(tag("passwordPolicies"))
+        for field in ("minimumPasswordLength", "complexity", "expiration", "maxLoginAttempts",
+                      "lockoutInterval", "minimumPasswordLifetime", "historyRestriction"):
+            val = child_text(pp, field)
+            if val is not None:
+                result["passwordPolicies"][field] = val
 
-            pp = root.find(tag("passwordPolicies"))
-            if pp is not None:
-                for field in ["minimumPasswordLength", "complexity", "expiration",
-                              "maxLoginAttempts", "lockoutInterval",
-                              "minimumPasswordLifetime", "obscure"]:
-                    el = pp.find(tag(field))
-                    if el is not None:
-                        result["passwordPolicies"][field] = el.text
+        ss = root.find(tag("sessionSettings"))
+        for field in ("sessionTimeout", "forceRelogin", "enforceIpRangesEveryRequest",
+                      "lockSessionsToDomain", "lockSessionsToIp", "requireHttpOnly"):
+            val = child_text(ss, field)
+            if val is not None:
+                result["sessionSettings"][field] = val
 
-            ss = root.find(tag("sessionSettings"))
-            if ss is not None:
-                for field in ["sessionTimeout", "forceRelogin", "requireHttps",
-                              "clickjackProtectionHeader", "enforceIpRangesEveryRequest",
-                              "lockSessionsToDomain"]:
-                    el = ss.find(tag(field))
-                    if el is not None:
-                        result["sessionSettings"][field] = el.text
+        # These two live at the top level of the file, under different names.
+        https = child_text(root, "enableRequireHttpsConnection")
+        if https is not None:
+            result["sessionSettings"]["requireHttps"] = https
+        admin = child_text(root, "enableAdminLoginAsAnyUser")
+        if admin is not None:
+            result["loginAccessPolicies"]["administratorsCanLogInAsAny"] = admin
 
-            lap = root.find(tag("loginAccessPolicies"))
-            if lap is not None:
-                el = lap.find(tag("administratorsCanLogInAsAny"))
-                if el is not None:
-                    result["loginAccessPolicies"]["administratorsCanLogInAsAny"] = el.text
-
-        # Parse NetworkAccess XML
-        na_files = list(output_dir.rglob("*NetworkAccess*"))
-        if na_files:
-            tree = ET.parse(na_files[0])
-            root = tree.getroot()
-            ns   = root.tag.split("}")[0].lstrip("{") if "}" in root.tag else ""
-            def tag(name): return f"{{{ns}}}{name}" if ns else name  # noqa: F811
-
-            for ipr in root.findall(tag("ipRanges")):
-                entry = {}
-                for field in ["start", "end", "description"]:
-                    el = ipr.find(tag(field))
-                    if el is not None:
-                        entry[field] = el.text
+        na = root.find(tag("networkAccess"))
+        if na is not None:
+            for ipr in na.findall(tag("ipRanges")):
+                entry = {f: child_text(ipr, f) for f in ("start", "end", "description")}
+                entry = {k: v for k, v in entry.items() if v is not None}
                 if entry:
                     result["ipRanges"].append(entry)
 

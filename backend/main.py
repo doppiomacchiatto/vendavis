@@ -25,6 +25,7 @@ from sf_cli import (list_orgs, list_objects, describe_object, run_apex_anonymous
                     get_org_limits, get_validation_rules, toggle_validation_rule,
                     sf_rest_request, get_security_settings)
 from sf_cli import _sf as _sf_raw   # for raw SOQL
+import vr_snapshot
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
 from claude_client import ClaudeClient, save_config, _load_config, _load_api_key, _load_base_url, _load_legacy_config
@@ -180,6 +181,24 @@ def get_vr(alias: str, object_api: str):
         return {"rules": rules}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+class VRSnapshotRequest(BaseModel):
+    rules: list[str]   # empty list clears the snapshot
+
+
+@app.get("/api/orgs/{alias}/objects/{object_api}/validation-rules/snapshot")
+def get_vr_snapshot(alias: str, object_api: str):
+    """Rules that were active before the last bulk Disable All (survives restarts)."""
+    return {"snapshot": vr_snapshot.get_snapshot(alias, object_api)}
+
+
+@app.post("/api/orgs/{alias}/objects/{object_api}/validation-rules/snapshot")
+def save_vr_snapshot(alias: str, object_api: str, body: VRSnapshotRequest):
+    try:
+        return {"snapshot": vr_snapshot.save_snapshot(alias, object_api, body.rules)}
+    except Exception as e:
+        raise HTTPException(500, f"Could not save the restore snapshot: {e}")
 
 
 class ToggleVRRequest(BaseModel):
@@ -583,7 +602,7 @@ def sf_version():
     try:
         result = subprocess.run(
             [sf_bin, "version", "--json"],
-            capture_output=True, text=True, timeout=15, env=env
+            capture_output=True, text=True, timeout=60, env=env
         )
         clean = _re.sub(r'\x1b\[[0-9;]*m', '', result.stdout).strip()
         try:
@@ -593,7 +612,7 @@ def sf_version():
             version_str = clean or result.stderr.strip() or "unknown"
         return {"sf_bin": sf_bin, "version": version_str}
     except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=503, detail="sf version check timed out")
+        raise HTTPException(status_code=504, detail="sf version check timed out")
 
 # ---------------------------------------------------------------------------
 # Entry point
