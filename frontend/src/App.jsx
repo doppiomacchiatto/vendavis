@@ -742,8 +742,8 @@ export default function App() {
               <button onClick={() => setSettingsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none">✕</button>
             </div>
 
-            {/* Scrollable body */}
-            <div className="flex flex-col gap-4 text-sm overflow-y-auto px-6 py-4 flex-1 min-h-0">
+            {/* Body */}
+            <div className="flex flex-col gap-4 text-sm px-6 py-4 flex-1 min-h-0">
               {/* Provider preset */}
               <label className="flex flex-col gap-1">
                 <span className="font-medium text-gray-700 dark:text-gray-300">Provider</span>
@@ -955,7 +955,7 @@ export default function App() {
                         </p>
                       )}
                       {/* Scrollable skill cards — shows ~3 cards, scroll for the rest */}
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-2 overflow-y-auto" style={{maxHeight: "calc(100vh - 460px)", minHeight: "6rem"}}>
                         {skillsTest.skills.map(s => (
                           <div key={s.name} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs ${
                             s.available
