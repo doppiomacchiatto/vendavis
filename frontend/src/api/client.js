@@ -32,6 +32,26 @@ export async function api(path, opts = {}) {
   }
 }
 
+/**
+ * Resolve once the backend answers /api/health. Never rejects and never shows an
+ * error: the backend may still be starting, or restarting after "Restart Backend".
+ * onWaiting() fires once if the first ping fails. shouldStop() aborts the wait
+ * (returns false in that case). Health pings are not written to the debug log.
+ */
+export async function waitForBackend({ onWaiting, shouldStop, intervalMs = 500 } = {}) {
+  let notified = false;
+  for (;;) {
+    if (shouldStop?.()) return false;
+    try {
+      await apiRaw("/api/health");
+      return true;
+    } catch {
+      if (!notified) { notified = true; onWaiting?.(); }
+      await new Promise(r => setTimeout(r, intervalMs));
+    }
+  }
+}
+
 async function apiRaw(path, opts = {}) {
   const method = (opts.method || "GET").toUpperCase();
   const invoke = await getInvoke();

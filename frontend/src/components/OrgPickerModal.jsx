@@ -9,39 +9,38 @@ export default function OrgPickerModal({ onSelect }) {
   const [error,         setError]         = useState("");
   const [chosen,        setChosen]        = useState("");
   const [startupStatus, setStartupStatus] = useState("starting"); // "starting" | "ready" | null
+  const [slowStart,     setSlowStart]     = useState(false);
 
   function addLog(msg, level = "info") {
     debugLog(`[OrgPicker] ${msg}`, level);
   }
 
   useEffect(() => {
+    let cancelled = false;
     async function init() {
-      // 1. Health check — retry up to 10s to allow bundled backend to start
+      // 1. Wait for the backend. The bundled backend takes ~6s to start when warm
+      // and noticeably longer on first launch after an install (one-file unpack +
+      // antivirus scan). No error is shown while it is starting: keep polling
+      // until it answers, and only show a soft "taking longer" hint after 60s.
       addLog("Starting data services…", "start");
       setStartupStatus("starting");
-      const MAX_ATTEMPTS = 20;
       const DELAY_MS = 500;
-      let healthy = false;
-      for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      const SLOW_AFTER = 120; // attempts (~60s)
+      for (let i = 0; !cancelled; i++) {
         try {
           await api("/api/health");
-          healthy = true;
           break;
         } catch {
           if (i === 0) addLog("Waiting for data services to start…", "info");
+          if (i === SLOW_AFTER) {
+            addLog("Data services are taking longer than usual to start…", "warn");
+            setSlowStart(true);
+          }
           await new Promise(r => setTimeout(r, DELAY_MS));
         }
       }
-      if (!healthy) {
-        const msg =
-          "Cannot reach the backend server.\n" +
-          "Start it with: npm run dev:backend";
-        addLog("❌ " + msg, "error");
-        setError(msg);
-        setStartupStatus(null);
-        setLoading(false);
-        return;
-      }
+      if (cancelled) return;
+      setSlowStart(false);
       addLog("✅ Data services ready", "done");
       setStartupStatus("ready");
       // Brief pause so user sees "ready" before it disappears
@@ -55,8 +54,9 @@ export default function OrgPickerModal({ onSelect }) {
         addLog(`✅ Salesforce CLI found (${sfInfo.version || sfInfo.sf_bin})`, "done");
       } catch (e) {
         const msg = String(e);
-        // Backend returns HTTP 503 when sf/sfdx binary is not found
-        if (msg.includes("503") || msg.includes("Could not find") || msg.includes("sfdx")) {
+        // Backend returns HTTP 503 "Could not find 'sf' or 'sfdx'" when the binary is missing.
+        // Timeouts (504) and other errors must not be reported as a missing CLI.
+        if (msg.includes("Could not find")) {
           addLog("❌ Salesforce CLI not found", "error");
           setError("__sf_missing__");
           setLoading(false);
@@ -83,6 +83,7 @@ export default function OrgPickerModal({ onSelect }) {
       }
     }
     init();
+    return () => { cancelled = true; };
   }, []);
 
   function confirm() {
@@ -109,7 +110,11 @@ export default function OrgPickerModal({ onSelect }) {
             <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0" />
             <div>
               <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Starting data services…</p>
-              <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5">This takes a moment on first launch</p>
+              <p className="text-xs text-blue-500 dark:text-blue-400 mt-0.5">
+                {slowStart
+                  ? "Taking longer than usual. Still waiting, no action needed."
+                  : "This takes a moment on first launch"}
+              </p>
             </div>
           </div>
         )}
