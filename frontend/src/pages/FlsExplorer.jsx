@@ -78,6 +78,7 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
     setLoadingFld(true);
     setFields([]);
     setVrRules([]);
+    setVrSnapshot(null);
     setVrOpen(false);
     log(`Loading fields for ${obj.label} (${obj.apiName})…`);
     try {
@@ -102,12 +103,42 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
     log(`Loading validation rules for ${obj.label}…`);
     try {
       const d = await api(`/api/orgs/${org.alias}/objects/${obj.apiName}/validation-rules`);
-      setVrRules(d.rules || []);
-      log(`${(d.rules || []).length} validation rule(s) loaded for ${obj.label}`, "success");
+      const rules = d.rules || [];
+      setVrRules(rules);
+      log(`${rules.length} validation rule(s) loaded for ${obj.label}`, "success");
+      await loadVrSnapshot(obj, rules);
     } catch (e) {
       log(`Validation rules error: ${e.message}`, "error");
     } finally {
       setVrLoading(false);
+    }
+  }
+
+  // ── Bulk-disable restore snapshot (persisted by the backend as JSON) ─────────
+  const vrSnapshotUrl = (obj) => `/api/orgs/${org.alias}/objects/${obj.apiName}/validation-rules/snapshot`;
+
+  async function saveVrSnapshot(obj, names) {
+    await api(vrSnapshotUrl(obj), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules: names }),
+    });
+  }
+
+  // Load the saved snapshot, keeping only rules that still exist and are still off.
+  // If nothing is left to restore (e.g. re-enabled in Setup), clear the saved file.
+  async function loadVrSnapshot(obj, rules) {
+    try {
+      const d = await api(vrSnapshotUrl(obj));
+      const saved = d.snapshot?.rules || [];
+      if (saved.length === 0) { setVrSnapshot(null); return; }
+      const offNames = new Set(rules.filter(r => !r.active).map(r => r.name));
+      const pending = saved.filter(n => offNames.has(n));
+      if (pending.length !== saved.length) await saveVrSnapshot(obj, pending);
+      setVrSnapshot(pending.length ? pending : null);
+      if (pending.length) log(`Restore snapshot found: ${pending.length} rule(s) were disabled by Disable All (saved ${d.snapshot.savedAt})`);
+    } catch (e) {
+      log(`Could not read restore snapshot: ${e.message}`, "error");
     }
   }
 
@@ -135,20 +166,33 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
 
   // ── Bulk VR toggle ───────────────────────────────────────────────────────────
   async function bulkToggleVR(targetActive) {
+    const obj = selectedObj;
     const toToggle = targetActive
-      ? vrRules.filter(r => !r.active && vrSnapshot?.includes(r.name))  // restore snapshot
-      : vrRules.filter(r => r.active);                                   // disable all active
+      ? vrRules.filter(r => !r.active && (!vrSnapshot || vrSnapshot.includes(r.name)))  // restore snapshot (or Enable All)
+      : vrRules.filter(r => r.active);                                                    // disable all active
 
     if (toToggle.length === 0) return;
 
-    // Save snapshot before disabling so restore is exact
-    if (!targetActive) setVrSnapshot(vrRules.filter(r => r.active).map(r => r.name));
+    // Persist the snapshot BEFORE disabling anything, so Restore survives switching
+    // objects/tabs and app restarts. Merge with any rules still waiting to be restored.
+    // If it can't be saved, don't disable anything.
+    if (!targetActive) {
+      const names = [...new Set([...(vrSnapshot || []), ...toToggle.map(r => r.name)])];
+      try {
+        await saveVrSnapshot(obj, names);
+      } catch (e) {
+        log(`Could not save the restore snapshot, nothing was disabled: ${e.message}`, "error");
+        return;
+      }
+      setVrSnapshot(names);
+    }
 
     setVrBulkBusy(true);
     const action = targetActive ? "Enabling" : "Disabling";
     log(`${action} ${toToggle.length} validation rule(s) on ${selectedObj.label}…`);
 
     let failed = 0;
+    const failedNames = [];
     for (const rule of toToggle) {
       setVrToggling(rule.name);
       try {
@@ -162,12 +206,18 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
       } catch (e) {
         log(`"${rule.name}" failed: ${e.message}`, "error");
         failed++;
+        failedNames.push(rule.name);
       }
     }
 
     setVrToggling(null);
     setVrBulkBusy(false);
-    if (targetActive) setVrSnapshot(null);  // clear snapshot after restore
+    if (targetActive) {
+      // Keep only the rules that failed to restore, so they can be retried
+      try { await saveVrSnapshot(obj, failedNames); }
+      catch (e) { log(`Could not update restore snapshot: ${e.message}`, "error"); }
+      setVrSnapshot(failedNames.length ? failedNames : null);
+    }
     const ok = toToggle.length - failed;
     log(`Bulk ${targetActive ? "enable" : "disable"} complete — ${ok}/${toToggle.length} succeeded`, failed ? "error" : "success");
   }
@@ -394,13 +444,21 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
           {/* Scrollable table */}
           <div className="flex-1 overflow-auto">
             {fields.length > 0 && (
-              <table className="w-full text-sm border-collapse">
-                <thead className="sticky top-0 bg-gray-100 dark:bg-gray-700 text-left text-xs uppercase text-gray-500 tracking-wider select-none">
+              <table className="w-full text-sm border-collapse table-fixed">
+                <colgroup>
+                  <col style={{ width: "28%" }} />
+                  <col style={{ width: "28%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "10%" }} />
+                </colgroup>
+                <thead className="sticky top-0 z-10 bg-gray-100 dark:bg-gray-700 text-left text-xs uppercase tracking-wider select-none border-b border-gray-200 dark:border-gray-600">
                   <tr>
                     {[
-                      { col: "label",    label: "Label",    cls: "" },
-                      { col: "apiName",  label: "API Name", cls: "" },
-                      { col: "type",     label: "Type",     cls: "" },
+                      { col: "label",    label: "Label",    cls: "text-left" },
+                      { col: "apiName",  label: "API Name", cls: "text-left" },
+                      { col: "type",     label: "Type",     cls: "text-left" },
                       { col: "required", label: "Req",      cls: "text-center", title: "Required on record create" },
                       { col: "readable", label: "Readable", cls: "text-center" },
                       { col: "editable", label: "Editable", cls: "text-center" },
@@ -409,33 +467,56 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
                         key={col}
                         title={title}
                         onClick={() => toggleSort(col)}
-                        className={`px-3 py-2 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${cls}`}
+                        className={`px-3 py-2 font-semibold text-gray-500 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors ${cls}`}
                       >
-                        {label}
-                        {fieldSort.col === col && (
-                          <span className="ml-1 text-blue-500">{fieldSort.dir === "asc" ? "↑" : "↓"}</span>
-                        )}
+                        <span className="inline-flex items-center gap-1">
+                          {label}
+                          {fieldSort.col === col
+                            ? <span className="text-blue-500">{fieldSort.dir === "asc" ? "↑" : "↓"}</span>
+                            : <span className="text-gray-300 dark:text-gray-600">↕</span>
+                          }
+                        </span>
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60">
                   {sortedFields(fields)
                     .slice(fieldPage * FIELD_PAGE_SIZE, (fieldPage + 1) * FIELD_PAGE_SIZE)
                     .map((f, i) => (
-                    <tr key={f.apiName} className={i % 2 === 0 ? "bg-white dark:bg-gray-800" : "bg-gray-50 dark:bg-gray-750"}>
-                      <td className="px-3 py-1.5 truncate max-w-xs">{f.label}</td>
-                      <td className="px-3 py-1.5 font-mono text-xs text-gray-500 truncate">{f.apiName}</td>
-                      <td className="px-3 py-1.5 text-gray-500 text-xs">{f.type}</td>
-                      <td className="px-3 py-1.5 text-center">
-                        {f.required && (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400" title="Required on create">
-                            *
-                          </span>
-                        )}
+                    <tr
+                      key={f.apiName}
+                      className={`group transition-colors ${
+                        i % 2 === 0
+                          ? "bg-white dark:bg-gray-800"
+                          : "bg-gray-50/60 dark:bg-gray-800/40"
+                      } hover:bg-blue-50/60 dark:hover:bg-blue-900/10`}
+                    >
+                      <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 truncate" title={f.label}>{f.label}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-gray-400 dark:text-gray-500 truncate" title={f.apiName}>{f.apiName}</td>
+                      <td className="px-3 py-2">
+                        <span className="inline-block px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 capitalize">
+                          {f.type}
+                        </span>
                       </td>
-                      <td className="px-3 py-1.5 text-center text-green-600">{f.readable ? "✓" : ""}</td>
-                      <td className="px-3 py-1.5 text-center text-green-600">{f.editable ? "✓" : ""}</td>
+                      <td className="px-3 py-2 text-center">
+                        {f.required
+                          ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-xs font-bold" title="Required on create">✱</span>
+                          : <span className="text-gray-200 dark:text-gray-700">—</span>
+                        }
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {f.readable
+                          ? <span className="text-green-500" title="Readable">✓</span>
+                          : <span className="text-gray-300 dark:text-gray-600">✗</span>
+                        }
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {f.editable
+                          ? <span className="text-green-500" title="Editable">✓</span>
+                          : <span className="text-gray-300 dark:text-gray-600">✗</span>
+                        }
+                      </td>
                     </tr>
                   ))}
                 </tbody>
