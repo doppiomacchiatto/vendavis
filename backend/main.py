@@ -98,10 +98,12 @@ class SettingsRequest(BaseModel):
     api_key:         Optional[str]  = None
     model:           Optional[str]  = None
     base_url:        Optional[str]  = None
+    theme:           Optional[str]  = None   # "system" | "light" | "dark"
     skills_enabled:  Optional[bool] = None
     skills_source:   Optional[str]  = None   # "bundled" | "path" | "url"
     skills_path:     Optional[str]  = None
     skills_url:      Optional[str]  = None
+    custom_skills:   Optional[list] = None   # [{name, path}]
 
 @app.get("/api/settings")
 def get_settings():
@@ -126,11 +128,14 @@ def get_settings():
         "models":         AVAILABLE_MODELS,
         "key_source":     "avio" if (Path.home() / ".avio_api_key").exists() else
                           ("legacy" if legacy.get("api_key") else "none"),
+        # Theme
+        "theme":          cfg.get("theme", "system"),
         # Skills config
         "skills_enabled": cfg.get("skills_enabled", True),
         "skills_source":  cfg.get("skills_source",  "bundled"),
         "skills_path":    cfg.get("skills_path",    ""),
         "skills_url":     cfg.get("skills_url",     ""),
+        "custom_skills":  cfg.get("custom_skills",  []),
     }
 
 class ModelsRequest(BaseModel):
@@ -163,10 +168,12 @@ def post_settings(req: SettingsRequest):
     save_config(
         model=req.model or "",
         base_url=req.base_url if req.base_url is not None else "",
+        theme=req.theme,
         skills_enabled=req.skills_enabled,
         skills_source=req.skills_source,
         skills_path=req.skills_path,
         skills_url=req.skills_url,
+        custom_skills=req.custom_skills,
     )
     # Force the AI client to rebuild with new settings on next call
     _ai._client = None

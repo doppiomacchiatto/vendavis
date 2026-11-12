@@ -105,13 +105,45 @@ export default function App() {
     }
   }, []);
 
+  // Load saved theme from backend on startup
+  useEffect(() => {
+    api("/api/settings").then((d) => {
+      const saved = d.theme || "system";
+      setTheme(saved);
+    }).catch(() => {});
+  }, []);
+
   // ── Settings modal ─────────────────────────────────────────────────────────
   const [aboutOpen,     setAboutOpen]     = useState(false);
   const [helpTab,       setHelpTab]       = useState("about"); // "about" | "requirements"
 
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  // "system" = follow OS, "light" = force light, "dark" = force dark
+  const [theme, setTheme] = useState("system");
+
+  // Apply theme class to <html> whenever theme or OS preference changes
+  useEffect(() => {
+    const applyTheme = (t) => {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const dark = t === "dark" || (t === "system" && prefersDark);
+      document.documentElement.classList.toggle("dark", dark);
+      try { localStorage.setItem("avio_theme", t); } catch (_) {}
+    };
+    applyTheme(theme);
+    if (theme === "system") {
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+      const handler = () => applyTheme("system");
+      mq.addEventListener("change", handler);
+      return () => mq.removeEventListener("change", handler);
+    }
+  }, [theme]);
+
   const [settingsOpen,  setSettingsOpen]  = useState(false);
-  const [settingsDraft, setSettingsDraft] = useState({ api_key: "", model: "", base_url: "", skills_enabled: true, skills_source: "bundled", skills_path: "", skills_url: "" });
+  const [settingsDraft, setSettingsDraft] = useState({ api_key: "", model: "", base_url: "", theme: "system", skills_enabled: true, skills_source: "bundled", skills_path: "", skills_url: "", custom_skills: [] });
   const [skillsTest,    setSkillsTest]    = useState(null);   // null | "testing" | { ok, msg, skills, version }
+  const [addSkillPath,  setAddSkillPath]  = useState("");      // draft path for custom skill
+  const [addSkillName,  setAddSkillName]  = useState("");      // draft name label for custom skill
+  const [addSkillOpen,  setAddSkillOpen]  = useState(false);   // show inline add form
   const [settingsTab,   setSettingsTab]   = useState("model"); // "model" | "skills"
   const [availModels,   setAvailModels]   = useState([]);
   const [providers,     setProviders]     = useState([]);
@@ -127,10 +159,12 @@ export default function App() {
     api("/api/settings").then((d) => {
       setSettingsDraft({
         api_key: "", model: d.model || "", base_url: d.base_url || "",
+        theme:          d.theme          || "system",
         skills_enabled: d.skills_enabled !== false,
         skills_source:  d.skills_source  || "bundled",
         skills_path:    d.skills_path    || "",
         skills_url:     d.skills_url     || "",
+        custom_skills:  d.custom_skills  || [],
       });
       setAvailModels(d.models || []);
       setProviders(d.providers || []);
@@ -138,6 +172,9 @@ export default function App() {
       setSettingsKeySource(d.key_source || "none");
       setSkillsTest(null);
       setSettingsTab("model");
+      setAddSkillOpen(false);
+      setAddSkillPath("");
+      setAddSkillName("");
       if (d.key_set) refreshModels({ base_url: d.base_url || "" });
     }).catch(() => {});
   }, [settingsOpen]);
@@ -184,12 +221,16 @@ export default function App() {
           api_key:        settingsDraft.api_key,
           model:          settingsDraft.model,
           base_url:       settingsDraft.base_url,
+          theme:          settingsDraft.theme,
           skills_enabled: settingsDraft.skills_enabled,
           skills_source:  settingsDraft.skills_source,
           skills_path:    settingsDraft.skills_path,
           skills_url:     settingsDraft.skills_url,
+          custom_skills:  settingsDraft.custom_skills,
         }),
       });
+      // Apply theme immediately on save
+      setTheme(settingsDraft.theme || "system");
       setSettingsSaved("saved");
       setTimeout(() => { setSettingsSaved(""); setSettingsOpen(false); }, 900);
     } catch (e) {
@@ -852,6 +893,24 @@ export default function App() {
                   </select>
                   {modelsNote && <span className="text-xs text-gray-400">{modelsNote}</span>}
                 </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Theme</span>
+                  <div className="flex gap-2">
+                    {[["system", "System"], ["light", "☀️ Light"], ["dark", "🌙 Dark"]].map(([val, label]) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setSettingsDraft(d => ({ ...d, theme: val }))}
+                        className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                          settingsDraft.theme === val
+                            ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300"
+                            : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                </label>
               </div>
             )}
 
@@ -958,18 +1017,76 @@ export default function App() {
                   )}
                 </div>
 
-                {/* MVP-1: Add custom skill */}
-                <div className="shrink-0 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">Custom skills</span>
-                  <button
-                    type="button"
-                    disabled
-                    title="Coming in MVP-1 — add a custom skill directory"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-xs text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-60"
-                  >
-                    <span className="text-base leading-none">+</span> Add Skill
-                    <span className="ml-1 text-gray-300 dark:text-gray-600 italic">MVP-1</span>
-                  </button>
+                {/* Custom skills */}
+                <div className="shrink-0 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Custom skills</span>
+                    {!addSkillOpen && (
+                      <button
+                        type="button"
+                        onClick={() => setAddSkillOpen(true)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-dashed border-blue-300 dark:border-blue-700 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                      >
+                        <span className="text-sm leading-none">+</span> Add Skill
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Existing custom skills list */}
+                  {settingsDraft.custom_skills.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      {settingsDraft.custom_skills.map((cs, i) => (
+                        <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-xs">
+                          <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                          <span className="font-medium text-gray-800 dark:text-gray-200 truncate flex-1">{cs.name || cs.path}</span>
+                          <span className="text-gray-400 dark:text-gray-500 font-mono truncate max-w-[120px]">{cs.path}</span>
+                          <button
+                            type="button"
+                            onClick={() => setSettingsDraft(d => ({ ...d, custom_skills: d.custom_skills.filter((_, j) => j !== i) }))}
+                            className="text-gray-300 hover:text-red-400 dark:text-gray-600 dark:hover:text-red-400 transition-colors ml-1 shrink-0"
+                            title="Remove"
+                          >✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add skill inline form */}
+                  {addSkillOpen && (
+                    <div className="flex flex-col gap-2 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
+                      <input
+                        type="text"
+                        placeholder="Skill name (e.g. My SOQL Guide)"
+                        value={addSkillName}
+                        onChange={e => setAddSkillName(e.target.value)}
+                        className="border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="/path/to/skill-directory (must contain SKILL.md)"
+                        value={addSkillPath}
+                        onChange={e => setAddSkillPath(e.target.value)}
+                        className="border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => { setAddSkillOpen(false); setAddSkillPath(""); setAddSkillName(""); }}
+                          className="px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        >Cancel</button>
+                        <button
+                          type="button"
+                          disabled={!addSkillPath.trim()}
+                          onClick={() => {
+                            const entry = { name: addSkillName.trim() || addSkillPath.trim().split("/").pop(), path: addSkillPath.trim() };
+                            setSettingsDraft(d => ({ ...d, custom_skills: [...d.custom_skills, entry] }));
+                            setAddSkillOpen(false); setAddSkillPath(""); setAddSkillName("");
+                          }}
+                          className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-medium transition-colors"
+                        >Add</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Scrollable skills list */}
@@ -1013,20 +1130,15 @@ export default function App() {
               {settingsSaved.startsWith("error:") && (
                 <span className="text-red-500 text-xs mr-auto">{settingsSaved.slice(6)}</span>
               )}
-              {settingsTab === "model" && (
-                <span className="text-xs text-gray-400 mr-auto italic">Switch to Skills tab to save changes</span>
-              )}
               <button
                 onClick={() => setSettingsOpen(false)}
-                disabled={settingsTab !== "skills"}
-                className="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                className="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={saveSettings}
-                disabled={settingsTab !== "skills"}
-                className="px-5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+                className="px-5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
               >
                 Save
               </button>

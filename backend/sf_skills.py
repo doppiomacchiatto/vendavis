@@ -60,14 +60,15 @@ def _load_skills_config() -> dict:
         if CONFIG_PATH.exists():
             raw = json.loads(CONFIG_PATH.read_text())
             return {
-                "enabled": raw.get("skills_enabled", True),
-                "source":  raw.get("skills_source",  "bundled"),
-                "path":    raw.get("skills_path",    None),
-                "url":     raw.get("skills_url",     None),
+                "enabled":       raw.get("skills_enabled", True),
+                "source":        raw.get("skills_source",  "bundled"),
+                "path":          raw.get("skills_path",    None),
+                "url":           raw.get("skills_url",     None),
+                "custom_skills": raw.get("custom_skills",  []),
             }
     except Exception as e:
         log.debug("sf_skills: could not read config — %s", e)
-    return {"enabled": True, "source": "bundled", "path": None, "url": None}
+    return {"enabled": True, "source": "bundled", "path": None, "url": None, "custom_skills": []}
 
 
 def _resolve_skills_root(cfg: dict) -> Optional[Path]:
@@ -170,6 +171,71 @@ def _load_file_url(base_url: str, rel_path: str) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# Custom skill helpers
+# ---------------------------------------------------------------------------
+
+def _load_custom_skill_context(entry: dict) -> Optional[str]:
+    """
+    Load all markdown files from a custom skill directory.
+    entry = {"name": "...", "path": "/abs/path/to/skill-dir"}
+    The directory should contain SKILL.md and optionally a references/ subdir.
+    Returns a markdown block or None if the path is inaccessible.
+    """
+    raw_path = (entry.get("path") or "").strip()
+    if not raw_path:
+        return None
+    root = Path(raw_path).expanduser()
+    if not root.is_dir():
+        log.warning("sf_skills: custom skill path not found: %s", root)
+        return None
+
+    parts = []
+    # Load SKILL.md first if present
+    skill_md = root / "SKILL.md"
+    if skill_md.exists():
+        content = _load_file_local(root, "SKILL.md")
+        if content:
+            parts.append(content)
+    # Then any other .md files (references/, etc.)
+    for md in sorted(root.rglob("*.md")):
+        if md == skill_md:
+            continue
+        try:
+            content = md.read_text(encoding="utf-8")
+            content = re.sub(r"<!--.*?-->", "", content, flags=re.DOTALL).strip()
+            if content:
+                parts.append(content)
+        except Exception as e:
+            log.debug("sf_skills: custom skill read error %s — %s", md, e)
+
+    if not parts:
+        return None
+    name = entry.get("name") or root.name
+    return f"## {name} (custom)\n\n" + "\n\n---\n\n".join(parts)
+
+
+def _build_custom_context(cfg: dict) -> str:
+    """Build context block for all configured custom skills. Returns '' if none."""
+    customs = cfg.get("custom_skills") or []
+    if not customs:
+        return ""
+    sections = []
+    for entry in customs:
+        block = _load_custom_skill_context(entry)
+        if block:
+            sections.append(block)
+    if not sections:
+        return ""
+    return (
+        "\n\n"
+        "=== CUSTOM SKILL REFERENCE ===\n"
+        "The following custom guidance applies to this request.\n\n"
+        + "\n\n===\n\n".join(sections)
+        + "\n\n=== END CUSTOM SKILL REFERENCE ==="
+    )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -235,7 +301,15 @@ def augment_system(system: Optional[str], messages: list[dict]) -> str:
         return system or ""
 
     log.info("sf_skills: injecting skills %s (source=%s)", skills, cfg.get("source"))
-    return (system or "") + skill_ctx
+    result = (system or "") + skill_ctx
+
+    # Also inject any custom skills unconditionally (always relevant)
+    custom_ctx = _build_custom_context(cfg)
+    if custom_ctx:
+        log.info("sf_skills: injecting %d custom skill(s)", len(cfg.get("custom_skills") or []))
+        result += custom_ctx
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -313,13 +387,31 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
             "bundled":     True,
         })
 
+    # Append custom skills to catalog
+    for entry in (cfg.get("custom_skills") or []):
+        raw_path = (entry.get("path") or "").strip()
+        root_p = Path(raw_path).expanduser() if raw_path else None
+        skill_md = (root_p / "SKILL.md") if root_p else None
+        file_count = sum(1 for _ in root_p.rglob("*.md")) if (root_p and root_p.is_dir()) else 0
+        available = bool(skill_md and skill_md.exists())
+        skills_status.append({
+            "name":        entry.get("name") or (root_p.name if root_p else raw_path),
+            "label":       entry.get("name") or (root_p.name if root_p else raw_path),
+            "description": raw_path,
+            "file_count":  file_count,
+            "available":   available,
+            "bundled":     True,   # treat as first-class for display purposes
+            "custom":      True,
+        })
+
     return {
-        "enabled":       cfg.get("enabled", True),
-        "source":        cfg.get("source", "bundled"),
-        "skills_path":   cfg.get("path") or "",
-        "skills_url":    cfg.get("url") or "",
-        "version":       version_info,
-        "skills":        skills_status,
+        "enabled":        cfg.get("enabled", True),
+        "source":         cfg.get("source", "bundled"),
+        "skills_path":    cfg.get("path") or "",
+        "skills_url":     cfg.get("url") or "",
+        "custom_skills":  cfg.get("custom_skills") or [],
+        "version":        version_info,
+        "skills":         skills_status,
     }
 
 

@@ -73,17 +73,21 @@ def _load_legacy_config() -> dict:
 def save_config(
     model:          str  = "",
     base_url:       str  = "",
+    theme:          Optional[str]  = None,
     skills_enabled: Optional[bool] = None,
     skills_source:  Optional[str]  = None,
     skills_path:    Optional[str]  = None,
     skills_url:     Optional[str]  = None,
+    custom_skills:  Optional[list] = None,
 ) -> None:
-    """Merge model/base_url/skills settings into ~/.avio_config.json."""
+    """Merge model/base_url/theme/skills settings into ~/.avio_config.json."""
     cfg = _load_avio_config()
     if model:
         cfg["model"] = model
     if base_url is not None:
         cfg["base_url"] = base_url
+    if theme is not None:
+        cfg["theme"] = theme
     if skills_enabled is not None:
         cfg["skills_enabled"] = skills_enabled
     if skills_source is not None:
@@ -92,6 +96,8 @@ def save_config(
         cfg["skills_path"] = skills_path
     if skills_url is not None:
         cfg["skills_url"] = skills_url
+    if custom_skills is not None:
+        cfg["custom_skills"] = custom_skills
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
 
 
