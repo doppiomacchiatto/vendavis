@@ -33,6 +33,7 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
   const [fieldPage,   setFieldPage]   = useState(0);
   const FIELD_PAGE_SIZE = 20;
   const [fieldSort,   setFieldSort]   = useState({ col: "label", dir: "asc" });
+  const [guideOpen,   setGuideOpen]   = useState(true);
 
   function toggleSort(col) {
     setFieldSort(s => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
@@ -304,12 +305,40 @@ export default function FlsExplorer({ org, ctx, setCtx, loadObjects: loadObjects
     : null;
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative">
       {overlayMsg && (
         <LoadingOverlay
           message={overlayMsg}
           onCancel={exporting ? handleCancel : undefined}
         />
+      )}
+
+      {/* ── Floating guidance panel ─────────────────────────────────────────── */}
+      {guideOpen && (
+        <div className="absolute top-3 right-3 z-20 w-56 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 rounded-xl shadow-lg overflow-hidden">
+          <div className="flex items-center justify-between bg-blue-600 px-3 py-2">
+            <span className="text-xs font-semibold text-white tracking-wide">How to use</span>
+            <button onClick={() => setGuideOpen(false)} className="text-blue-200 hover:text-white text-sm leading-none">✕</button>
+          </div>
+          <div className="px-3 py-3 flex flex-col gap-2.5">
+            {[
+              ["1", "Select object(s)", "Check the box next to one or more objects in the sidebar (required before loading or exporting)"],
+              ["2", "Load Fields",      "Click an object name to view its field-level security details in the main panel"],
+              ["3", "Export to Excel",  "With objects checked, click Export to Excel — max 25 objects per export"],
+            ].map(([n, title, desc]) => (
+              <div key={n} className="flex gap-2.5">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center mt-0.5">{n}</span>
+                <div>
+                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug mt-0.5">{desc}</p>
+                </div>
+              </div>
+            ))}
+            <p className="text-xs text-amber-600 dark:text-amber-400 border-t border-gray-100 dark:border-gray-700 pt-2 mt-0.5">
+              ⚠ Max 25 objects per export
+            </p>
+          </div>
+        </div>
       )}
 
       {/* ── Object sidebar ──────────────────────────────────────────────────── */}
