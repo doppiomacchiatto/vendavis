@@ -103,20 +103,20 @@ function DrillTable({ rows }) {
     return <p className="text-xs text-slate-400">No records returned.</p>;
   const cols = Object.keys(rows[0]);
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-700/50">
+    <div className="overflow-x-auto rounded-lg border border-slate-200">
       <table className="w-full text-xs">
         <thead>
-          <tr className="bg-slate-800/80">
+          <tr className="bg-slate-100">
             {cols.map(c => (
-              <th key={c} className="px-2 py-1.5 text-left text-slate-300 font-semibold whitespace-nowrap">{c}</th>
+              <th key={c} className="px-2 py-1.5 text-left text-slate-700 font-semibold whitespace-nowrap">{c}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, ri) => (
-            <tr key={ri} className="border-t border-slate-700/30 hover:bg-slate-800/40">
+            <tr key={ri} className="border-t border-slate-100 hover:bg-slate-50">
               {cols.map(c => (
-                <td key={c} className="px-2 py-1.5 text-slate-200 font-mono whitespace-nowrap">
+                <td key={c} className="px-2 py-1.5 text-slate-700 font-mono whitespace-nowrap">
                   {row[c] == null ? <span className="text-slate-400 italic">null</span> : String(row[c])}
                 </td>
               ))}
@@ -133,15 +133,15 @@ function CheckDetailModal({ chk, result, org, onClose }) {
   const [drillRows, setDrillRows] = useState(null); // null | "loading" | "error" | []
   const status = result?.status ?? "info";
 
-  const headerBg = status === "fail" ? "bg-red-950/60 border-red-700/60"
-    : status === "warn"              ? "bg-yellow-950/40 border-yellow-700/50"
-    : status === "pass"              ? "bg-green-950/40 border-green-700/50"
-    : "bg-slate-800/80 border-slate-600/50";
+  const headerBg = status === "fail" ? "bg-red-50 border-red-200"
+    : status === "warn"              ? "bg-yellow-50 border-yellow-200"
+    : status === "pass"              ? "bg-green-50 border-green-200"
+    : "bg-slate-50 border-slate-200";
 
-  const accentText = status === "fail" ? "text-red-300"
-    : status === "warn"               ? "text-yellow-300"
-    : status === "pass"               ? "text-green-300"
-    : "text-blue-300";
+  const accentText = status === "fail" ? "text-red-600"
+    : status === "warn"               ? "text-yellow-700"
+    : status === "pass"               ? "text-green-700"
+    : "text-blue-600";
 
   // Auto-load the drill-down query when the modal opens
   useEffect(() => {
@@ -165,27 +165,27 @@ function CheckDetailModal({ chk, result, org, onClose }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
-      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-slate-600/60 bg-slate-900 shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
         {/* Header */}
         <div className={`shrink-0 flex items-start gap-3 px-5 py-4 border-b ${headerBg}`}>
           <span className="text-xl mt-0.5">{STATUS_ICON[status]}</span>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white leading-tight">{chk.label}</p>
+            <p className="text-sm font-semibold text-slate-900 leading-tight">{chk.label}</p>
             {result?.detail && <p className={`text-xs mt-1 ${accentText}`}>{result.detail}</p>}
           </div>
           <button onClick={onClose} title="Close"
-            className="shrink-0 text-slate-400 hover:text-white transition-colors text-lg leading-none">✕</button>
+            className="shrink-0 text-slate-400 hover:text-slate-700 transition-colors text-lg leading-none">✕</button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5">
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5 bg-white">
           {chk.tip && (
             <section>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-base">💡</span>
-                <p className="text-xs font-semibold text-slate-200 uppercase tracking-wide">How to fix</p>
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">How to fix</p>
               </div>
-              <p className="text-sm text-slate-300 leading-relaxed">{chk.tip}</p>
+              <p className="text-sm text-slate-700 leading-relaxed">{chk.tip}</p>
             </section>
           )}
 
@@ -193,7 +193,7 @@ function CheckDetailModal({ chk, result, org, onClose }) {
             <section>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-base">📋</span>
-                <p className="text-xs font-semibold text-slate-200 uppercase tracking-wide">Details</p>
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Details</p>
               </div>
               <DrillTable rows={result.rows} />
             </section>
@@ -203,12 +203,12 @@ function CheckDetailModal({ chk, result, org, onClose }) {
             <section>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-base">🔍</span>
-                <p className="text-xs font-semibold text-slate-200 uppercase tracking-wide">Records</p>
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Records</p>
               </div>
               {drillRows === "loading" && <p className="text-xs text-slate-400 animate-pulse">Loading records…</p>}
-              {drillRows === "error"   && <p className="text-xs text-red-400">Could not load records.</p>}
+              {drillRows === "error"   && <p className="text-xs text-red-500">Could not load records.</p>}
               {Array.isArray(drillRows) && <DrillTable rows={drillRows} />}
-              <p className="text-xs text-slate-500 mt-2 font-mono break-all">{chk.drillQuery}</p>
+              <p className="text-xs text-slate-400 mt-2 font-mono break-all">{chk.drillQuery}</p>
             </section>
           )}
 
@@ -218,9 +218,9 @@ function CheckDetailModal({ chk, result, org, onClose }) {
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 flex justify-end px-5 py-3 border-t border-slate-700/50">
+        <div className="shrink-0 flex justify-end px-5 py-3 border-t border-slate-100 bg-slate-50">
           <button onClick={onClose}
-            className="px-4 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors">
+            className="px-4 py-1.5 text-sm rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors">
             Close
           </button>
         </div>
@@ -239,20 +239,21 @@ function CheckRow({ chk, result, org }) {
     (chk.tip || chk.drillQuery || (Array.isArray(result.rows) && result.rows.length > 0));
   const canOpen    = hasContent && (status === "warn" || status === "fail" || Array.isArray(result.rows));
 
-  const borderCls = status === "fail" ? "border-red-700/60 bg-red-950/20"
-    : status === "warn"               ? "border-yellow-700/60 bg-yellow-950/10"
-    : "border-slate-700/40 bg-slate-800/30";
+  const borderCls = status === "fail" ? "border-red-200 bg-red-50"
+    : status === "warn"               ? "border-yellow-200 bg-yellow-50"
+    : status === "pass"               ? "border-green-100 bg-white"
+    : "border-slate-200 bg-white";
 
   return (
     <>
       <div
-        className={`rounded-lg border px-3 py-2 flex items-center gap-2 transition-colors ${borderCls} ${canOpen ? "cursor-pointer hover:brightness-110" : ""}`}
+        className={`rounded-lg border px-3 py-2 flex items-center gap-2 transition-colors ${borderCls} ${canOpen ? "cursor-pointer hover:brightness-95" : ""}`}
         onClick={() => canOpen && setModalOpen(true)}>
         <span className="text-sm shrink-0">
           {isRunning ? <span className="animate-pulse">⏳</span> : STATUS_ICON[status]}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-white">{chk.label}</p>
+          <p className="text-xs font-medium text-slate-800">{chk.label}</p>
           {!isRunning && result?.detail && (
             <p className={`text-xs mt-0.5 ${STATUS_COLOR[status]}`}>{result.detail}</p>
           )}
@@ -260,9 +261,9 @@ function CheckRow({ chk, result, org }) {
         </div>
         {canOpen && (
           <span className={`shrink-0 text-xs px-2 py-1 rounded-md border font-medium ${
-            status === "fail" ? "border-red-700 text-red-300"
-            : status === "warn" ? "border-yellow-700 text-yellow-300"
-            : "border-slate-600 text-slate-300"
+            status === "fail" ? "border-red-300 text-red-600"
+            : status === "warn" ? "border-yellow-300 text-yellow-700"
+            : "border-slate-300 text-slate-500"
           }`}>Details ›</span>
         )}
       </div>
@@ -290,8 +291,8 @@ function CategoryCard({ cat, checks, results, onClick, active, onRerun, phase })
   return (
     <div className={`flex flex-col gap-1 p-3 rounded-xl border text-left transition-all ${
       active
-        ? "border-blue-400 bg-slate-700/60 shadow-lg shadow-slate-900/60"
-        : "border-slate-700/60 bg-slate-800/40"
+        ? "border-blue-400 bg-blue-50 shadow-md shadow-blue-100"
+        : "border-slate-200 bg-white hover:border-slate-300"
     }`}>
       <button onClick={onClick} className="flex flex-col gap-1 flex-1 text-left">
         <div className="flex items-center justify-between">
@@ -302,21 +303,21 @@ function CategoryCard({ cat, checks, results, onClick, active, onRerun, phase })
             </span>
           )}
           {allDone && fails === 0 && warns === 0 && (
-            <span className="text-green-400 text-xs">✅</span>
+            <span className="text-green-500 text-xs">✅</span>
           )}
           {!allDone && (
             <span className="text-slate-400 text-xs">{done}/{total}</span>
           )}
         </div>
         <div>
-          <p className="text-xs font-semibold text-white">{cat}</p>
+          <p className="text-xs font-semibold text-slate-800">{cat}</p>
           <p className="text-xs text-slate-400 mt-0.5">{total} checks</p>
         </div>
       </button>
       {phase === "done" && onRerun && (
         <button
           onClick={(e) => { e.stopPropagation(); onRerun(cat); }}
-          className="mt-1 w-full px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-400 hover:text-slate-200 text-xs transition-colors">
+          className="mt-1 w-full px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-500 hover:text-slate-700 text-xs transition-colors">
           ↺ Re-run
         </button>
       )}
@@ -463,17 +464,17 @@ export default function OrgHealth({ org, onApiCall }) {
 
   // ── Preflight ──────────────────────────────────────────────────────────────
   if (phase === "preflight") return (
-    <div className="flex flex-col h-full bg-slate-900">
-      <div className="shrink-0 px-6 py-4 bg-slate-800 border-b border-slate-700">
-        <h1 className="text-lg font-bold text-white">🏥 Org Health Check</h1>
-        {org && <p className="text-xs text-slate-300 mt-0.5">Connected org: <span className="font-mono">{org.alias}</span> · <span className="text-slate-400">{org.username}</span></p>}
+    <div className="flex flex-col h-full bg-slate-50">
+      <div className="shrink-0 px-6 py-4 bg-white border-b border-slate-200">
+        <h1 className="text-lg font-bold text-slate-900">🏥 Org Health Check</h1>
+        {org && <p className="text-xs text-slate-500 mt-0.5">Connected org: <span className="font-mono text-slate-700">{org.alias}</span> · <span className="text-slate-400">{org.username}</span></p>}
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
-        <div className="px-4 py-3 bg-slate-800/60 rounded-xl border border-slate-700">
-          <p className="text-sm font-semibold text-white mb-1">What this does</p>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Runs <strong className="text-white">{total} read-only checks</strong> across {CHECK_CATEGORIES.length} categories.
+        <div className="px-4 py-3 bg-white rounded-xl border border-slate-200">
+          <p className="text-sm font-semibold text-slate-800 mb-1">What this does</p>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Runs <strong className="text-slate-800">{total} read-only checks</strong> across {CHECK_CATEGORIES.length} categories.
             No data is modified. Each check calls your org's API or runs a SOQL COUNT() query.
           </p>
         </div>
@@ -482,21 +483,21 @@ export default function OrgHealth({ org, onApiCall }) {
           {CHECK_CATEGORIES.map(cat => {
             const checks = HEALTH_CHECKS.filter(c => c.category === cat);
             return (
-              <div key={cat} className="p-3 bg-slate-800/40 rounded-xl border border-slate-700/60 flex flex-col gap-2">
+              <div key={cat} className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col gap-2">
                 <div>
                   <p className="text-sm mb-1">{CATEGORY_ICONS[cat]}</p>
-                  <p className="text-xs font-semibold text-white">{cat}</p>
+                  <p className="text-xs font-semibold text-slate-800">{cat}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{checks.length} checks</p>
                 </div>
                 <div className="flex flex-col gap-0.5 flex-1">
                   {checks.map(c => (
-                    <p key={c.id} className="text-xs text-slate-500 truncate">◦ {c.label}</p>
+                    <p key={c.id} className="text-xs text-slate-400 truncate">◦ {c.label}</p>
                   ))}
                 </div>
                 <button
                   disabled={!org}
                   onClick={() => startChecks(cat)}
-                  className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-700 hover:bg-blue-700 disabled:opacity-40 text-slate-200 text-xs font-semibold transition-colors border border-slate-600">
+                  className="mt-1 w-full px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white disabled:opacity-40 text-slate-600 text-xs font-semibold transition-colors border border-slate-200 hover:border-blue-600">
                   ▶ Run {cat}
                 </button>
               </div>
@@ -505,7 +506,7 @@ export default function OrgHealth({ org, onApiCall }) {
         </div>
       </div>
 
-      <div className="shrink-0 px-6 py-4 border-t border-slate-700 bg-slate-800/60 flex gap-3">
+      <div className="shrink-0 px-6 py-4 border-t border-slate-200 bg-white flex gap-3">
         <button
           disabled={!org}
           onClick={() => startChecks()}
@@ -521,32 +522,32 @@ export default function OrgHealth({ org, onApiCall }) {
   const catChecks    = HEALTH_CHECKS.filter(c => c.category === displayCat);
 
   return (
-    <div className="flex flex-col h-full bg-slate-900">
+    <div className="flex flex-col h-full bg-slate-50">
       {/* Header */}
-      <div className="shrink-0 px-4 py-3 bg-slate-800 border-b border-slate-700 flex items-center justify-between">
+      <div className="shrink-0 px-4 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
         <div>
-          <h1 className="text-sm font-bold text-white">🏥 Org Health Check</h1>
+          <h1 className="text-sm font-bold text-slate-900">🏥 Org Health Check</h1>
           {org && <p className="text-xs text-slate-400 font-mono">{org.alias}</p>}
         </div>
         <div className="flex items-center gap-3">
           {phase === "done" && (
             <span className="text-xs">
-              {fails > 0  && <span className="text-red-400 font-semibold mr-2">❌ {fails} failed</span>}
-              {warns > 0  && <span className="text-yellow-400 font-semibold mr-2">⚠️ {warns} warnings</span>}
-              {fails === 0 && warns === 0 && <span className="text-green-400 font-semibold">✅ All clear</span>}
+              {fails > 0  && <span className="text-red-500 font-semibold mr-2">❌ {fails} failed</span>}
+              {warns > 0  && <span className="text-yellow-600 font-semibold mr-2">⚠️ {warns} warnings</span>}
+              {fails === 0 && warns === 0 && <span className="text-green-600 font-semibold">✅ All clear</span>}
             </span>
           )}
           {phase === "done" && (
             <button
               onClick={exportReport}
               title="Export results as an HTML report"
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 hover:text-white hover:border-green-500 transition-colors">
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:text-slate-900 hover:border-green-400 transition-colors">
               📄 Export Report
             </button>
           )}
           {phase === "done" && (
             <button onClick={() => { setPhase("preflight"); setResults({}); setActiveCategory(null); }}
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-300 hover:text-white hover:border-blue-500 transition-colors">
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:text-slate-900 hover:border-blue-400 transition-colors">
               ↺ Re-run
             </button>
           )}
@@ -555,8 +556,8 @@ export default function OrgHealth({ org, onApiCall }) {
 
       {/* Progress bar (running only) */}
       {phase === "running" && (
-        <div className="shrink-0 px-4 py-2 bg-slate-800/50 border-b border-slate-700/50">
-          <div className="flex items-center justify-between text-xs text-slate-300 mb-1">
+        <div className="shrink-0 px-4 py-2 bg-white border-b border-slate-200">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
             <span>
               {current
                 ? `Check ${current.idx + 1} of ${current.total} — ${current.label}`
@@ -565,8 +566,8 @@ export default function OrgHealth({ org, onApiCall }) {
             </span>
             <span>{current ? current.idx + 1 : 0}/{current?.total ?? 0}</span>
           </div>
-          <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-400 rounded-full transition-all duration-300"
+          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 rounded-full transition-all duration-300"
               style={{ width: `${current?.total ? ((current.idx + 1) / current.total) * 100 : 0}%` }} />
           </div>
         </div>
@@ -574,11 +575,11 @@ export default function OrgHealth({ org, onApiCall }) {
 
       {/* Summary banner (done only) */}
       {phase === "done" && (
-        <div className="shrink-0 px-4 py-2 border-b border-slate-700 flex items-center gap-3 bg-slate-800/30">
+        <div className="shrink-0 px-4 py-2 border-b border-slate-200 flex items-center gap-3 bg-white">
           <div className="flex gap-4 text-xs">
-            <span className="text-red-400 font-semibold">❌ {fails} failed</span>
-            <span className="text-yellow-400 font-semibold">⚠️ {warns} warnings</span>
-            <span className="text-green-400 font-semibold">✅ {passes} passed</span>
+            <span className="text-red-500 font-semibold">❌ {fails} failed</span>
+            <span className="text-yellow-600 font-semibold">⚠️ {warns} warnings</span>
+            <span className="text-green-600 font-semibold">✅ {passes} passed</span>
             <span className="text-slate-400">ℹ️ {checked - fails - warns - passes} info</span>
           </div>
         </div>
@@ -587,7 +588,7 @@ export default function OrgHealth({ org, onApiCall }) {
       {/* Body: category cards left + detail right */}
       <div className="flex-1 flex min-h-0">
         {/* Left: category card grid */}
-        <div className="w-52 shrink-0 flex flex-col gap-2 p-3 border-r border-slate-700 overflow-y-auto">
+        <div className="w-52 shrink-0 flex flex-col gap-2 p-3 border-r border-slate-200 overflow-y-auto bg-slate-50">
           {CHECK_CATEGORIES.map(cat => (
             <CategoryCard
               key={cat}
@@ -603,10 +604,10 @@ export default function OrgHealth({ org, onApiCall }) {
         </div>
 
         {/* Right: checks for selected category */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 bg-slate-50">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-lg">{CATEGORY_ICONS[displayCat]}</span>
-            <h2 className="text-sm font-bold text-white">{displayCat}</h2>
+            <h2 className="text-sm font-bold text-slate-800">{displayCat}</h2>
             <span className="text-xs text-slate-400">{catChecks.length} checks</span>
           </div>
           {catChecks.map(chk => (

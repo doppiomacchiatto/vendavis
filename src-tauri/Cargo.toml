@@ -1,12 +1,12 @@
 [package]
-name = "sf-metadata-explorer"
+name = "avio"
 version = "2.0.0"
-description = "SF Metadata Explorer"
+description = "Avio — Unofficial Salesforce Tool"
 authors = ["jsantisi"]
 edition = "2021"
 
 [[bin]]
-name = "sf-metadata-explorer"
+name = "avio"
 path = "src/main.rs"
 
 [build-dependencies]

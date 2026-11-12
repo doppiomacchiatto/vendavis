@@ -23,11 +23,11 @@ export const STATUS_ICON = {
 };
 
 export const STATUS_COLOR = {
-  pass:    "text-green-400",
-  warn:    "text-yellow-400",
-  fail:    "text-red-400",
-  info:    "text-blue-300",
-  running: "text-blue-300",
+  pass:    "text-green-600",
+  warn:    "text-yellow-700",
+  fail:    "text-red-600",
+  info:    "text-blue-600",
+  running: "text-blue-500",
 };
 
 // ── Shared security-settings cache (one fetch per run, reused by all 9 checks) ─

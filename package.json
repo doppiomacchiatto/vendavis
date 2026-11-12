@@ -1,5 +1,5 @@
 {
-  "name": "sf-metadata-explorer",
+  "name": "avio",
   "version": "1.0.1",
   "description": "Avio — Salesforce Metadata Explorer (Tauri + React + FastAPI)",
   "scripts": {

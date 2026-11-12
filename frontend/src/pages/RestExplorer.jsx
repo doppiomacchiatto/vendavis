@@ -12,30 +12,151 @@ const METHOD_COLORS = {
 };
 
 const STATUS_COLOR = (s) =>
-  s >= 200 && s < 300 ? "text-green-600 dark:text-green-400"
-  : s >= 400           ? "text-red-600   dark:text-red-400"
-  :                      "text-yellow-600 dark:text-yellow-400";
+  s >= 200 && s < 300 ? "text-green-600"
+  : s >= 400           ? "text-red-600"
+  :                      "text-yellow-600";
+
+const STATUS_TEXT = {
+  200: "OK", 201: "Created", 204: "No Content",
+  400: "Bad Request", 401: "Unauthorized", 403: "Forbidden",
+  404: "Not Found", 405: "Method Not Allowed", 409: "Conflict",
+  500: "Internal Server Error", 503: "Service Unavailable",
+};
 
 const DEFAULT_PATH = "/services/data/v68.0/";
 
 // History stored in module scope so it persists across tab switches (not across sessions)
 let _history = [];
 
+// ── Sample requests ────────────────────────────────────────────────────────
+const SAMPLES = [
+  {
+    group: "Getting Started",
+    items: [
+      { label: "API root",              method: "GET",  path: "/services/data/v68.0/" },
+      { label: "List all objects",      method: "GET",  path: "/services/data/v68.0/sobjects" },
+      { label: "Org limits",            method: "GET",  path: "/services/data/v68.0/limits" },
+    ],
+  },
+  {
+    group: "Query (SOQL)",
+    items: [
+      { label: "Recent Accounts",       method: "GET",  path: "/services/data/v68.0/query?q=SELECT+Id,Name,Industry+FROM+Account+ORDER+BY+LastModifiedDate+DESC+LIMIT+10" },
+      { label: "Open Opportunities",    method: "GET",  path: "/services/data/v68.0/query?q=SELECT+Id,Name,StageName,Amount+FROM+Opportunity+WHERE+IsClosed=false+ORDER+BY+CloseDate+ASC+LIMIT+10" },
+      { label: "Active Users",          method: "GET",  path: "/services/data/v68.0/query?q=SELECT+Id,Name,Username,IsActive+FROM+User+WHERE+IsActive=true+ORDER+BY+Name+LIMIT+20" },
+      { label: "Recent Cases",          method: "GET",  path: "/services/data/v68.0/query?q=SELECT+Id,CaseNumber,Subject,Status+FROM+Case+ORDER+BY+CreatedDate+DESC+LIMIT+10" },
+    ],
+  },
+  {
+    group: "Metadata",
+    items: [
+      { label: "Describe Account",      method: "GET",  path: "/services/data/v68.0/sobjects/Account/describe" },
+      { label: "Describe Contact",      method: "GET",  path: "/services/data/v68.0/sobjects/Contact/describe" },
+      { label: "Describe Opportunity",  method: "GET",  path: "/services/data/v68.0/sobjects/Opportunity/describe" },
+    ],
+  },
+  {
+    group: "Tooling API",
+    items: [
+      { label: "List Apex Classes",     method: "GET",  path: "/services/data/v68.0/tooling/query?q=SELECT+Id,Name,Status+FROM+ApexClass+ORDER+BY+Name+LIMIT+20" },
+      { label: "List Apex Triggers",    method: "GET",  path: "/services/data/v68.0/tooling/query?q=SELECT+Id,Name,TableEnumOrId,Status+FROM+ApexTrigger+ORDER+BY+Name+LIMIT+20" },
+      { label: "Custom Objects",        method: "GET",  path: "/services/data/v68.0/tooling/query?q=SELECT+Id,DeveloperName,Label+FROM+CustomObject+ORDER+BY+DeveloperName+LIMIT+20" },
+    ],
+  },
+  {
+    group: "Org Health",
+    items: [
+      { label: "Password policies",     method: "GET",  path: "/services/data/v68.0/query?q=SELECT+Id,PasswordComplexity,MinPasswordLength,PasswordExpiration,MaxLoginAttempts+FROM+SecuritySettings+LIMIT+1" },
+      { label: "Setup audit trail",     method: "GET",  path: "/services/data/v68.0/query?q=SELECT+Id,CreatedBy.Name,Action,Section,Display,CreatedDate+FROM+SetupAuditTrail+ORDER+BY+CreatedDate+DESC+LIMIT+20" },
+      { label: "Login history (24h)",   method: "GET",  path: "/services/data/v68.0/query?q=SELECT+Id,UserId,LoginTime,LoginType,Status,SourceIp+FROM+LoginHistory+WHERE+LoginTime=LAST_N_HOURS:24+ORDER+BY+LoginTime+DESC+LIMIT+50" },
+    ],
+  },
+];
+
+// ── Help / Samples modal ───────────────────────────────────────────────────
+function HelpModal({ onClose, onLoad }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <p className="text-sm font-bold text-slate-900">REST Explorer — How to Use</p>
+            <p className="text-xs text-slate-400 mt-0.5">Click any sample to load it into the editor</p>
+          </div>
+          <button onClick={onClose}
+            className="text-slate-400 hover:text-slate-700 text-lg leading-none transition-colors">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5">
+
+          {/* How to use */}
+          <section className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-slate-700 leading-relaxed space-y-1.5">
+            <p><strong className="text-slate-800">1. Select a method</strong> — GET for reads, POST/PUT/PATCH to create or update, DELETE to remove.</p>
+            <p><strong className="text-slate-800">2. Enter a path</strong> — always relative, e.g. <code className="bg-blue-100 px-1 rounded font-mono">/services/data/v68.0/sobjects</code>. The org base URL is added automatically.</p>
+            <p><strong className="text-slate-800">3. For POST/PUT/PATCH</strong> — a JSON body editor appears below the path. Paste or type your request body there.</p>
+            <p><strong className="text-slate-800">4. Use Up</strong> — navigates to the parent path segment, handy for exploring nested resources.</p>
+            <p><strong className="text-slate-800">5. Click links</strong> in the response tree to navigate directly to that resource.</p>
+            <p><strong className="text-slate-800">6. Raw mode</strong> — shows the response as plain JSON text instead of the interactive tree.</p>
+          </section>
+
+          {/* Samples */}
+          {SAMPLES.map(group => (
+            <section key={group.group}>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{group.group}</p>
+              <div className="flex flex-col gap-1">
+                {group.items.map(item => (
+                  <button
+                    key={item.path}
+                    onClick={() => { onLoad(item); onClose(); }}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 text-left transition-colors group"
+                  >
+                    <span className={`shrink-0 font-bold text-xs px-1.5 py-0.5 rounded ${METHOD_COLORS[item.method]}`}>
+                      {item.method}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="text-xs font-medium text-slate-700 group-hover:text-slate-900">{item.label}</span>
+                      <span className="block text-xs font-mono text-slate-400 truncate mt-0.5">{item.path}</span>
+                    </span>
+                    <span className="text-slate-300 group-hover:text-blue-400 text-sm">→</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 px-5 py-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+          <button onClick={onClose}
+            className="px-4 py-1.5 text-sm rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── JSON tree renderer ─────────────────────────────────────────────────────
 function JsonNode({ data, depth = 0 }) {
   const [collapsed, setCollapsed] = useState(depth > 2);
   const indent = depth * 16;
 
-  if (data === null)    return <span className="text-gray-400">null</span>;
-  if (data === true)    return <span className="text-green-500">true</span>;
-  if (data === false)   return <span className="text-red-400">false</span>;
-  if (typeof data === "number") return <span className="text-orange-400">{data}</span>;
+  if (data === null)    return <span className="text-slate-400 italic">null</span>;
+  if (data === true)    return <span className="text-emerald-600">true</span>;
+  if (data === false)   return <span className="text-red-500">false</span>;
+  if (typeof data === "number") return <span className="text-orange-600">{data}</span>;
   if (typeof data === "string") {
     // Linkify SF REST paths
     if (data.startsWith("/services/")) {
-      return <span className="text-blue-400 underline cursor-pointer" data-path={data}>{`"${data}"`}</span>;
+      return <span className="text-blue-600 underline cursor-pointer" data-path={data}>{`"${data}"`}</span>;
     }
-    return <span className="text-emerald-400">{`"${data}"`}</span>;
+    return <span className="text-emerald-700">{`"${data}"`}</span>;
   }
 
   const isArray  = Array.isArray(data);
@@ -44,21 +165,21 @@ function JsonNode({ data, depth = 0 }) {
   const close    = isArray ? "]" : "}";
   const count    = entries.length;
 
-  if (count === 0) return <span className="text-gray-500">{open}{close}</span>;
+  if (count === 0) return <span className="text-slate-400">{open}{close}</span>;
 
   return (
     <span>
       <button
         onClick={() => setCollapsed(c => !c)}
-        className="text-gray-400 hover:text-white mr-1 font-mono"
+        className="text-slate-400 hover:text-slate-700 mr-1 font-mono"
       >
         {collapsed ? "▶" : "▼"}
       </button>
-      <span className="text-gray-400">{open}</span>
+      <span className="text-slate-500">{open}</span>
       {collapsed ? (
         <button
           onClick={() => setCollapsed(false)}
-          className="text-gray-500 hover:text-gray-300 text-xs mx-1 italic"
+          className="text-slate-400 hover:text-slate-600 text-xs mx-1 italic"
         >
           {count} {isArray ? "items" : "keys"}
         </button>
@@ -67,28 +188,29 @@ function JsonNode({ data, depth = 0 }) {
           {entries.map(([k, v], i) => (
             <div key={k} className="leading-6">
               {!isArray && (
-                <span className="text-purple-300 mr-1">"{k}":</span>
+                <span className="text-violet-700 mr-1">"{k}":</span>
               )}
               <JsonNode data={v} depth={depth + 1} />
-              {i < count - 1 && <span className="text-gray-600">,</span>}
+              {i < count - 1 && <span className="text-slate-400">,</span>}
             </div>
           ))}
         </div>
       )}
-      {!collapsed && <span className="text-gray-400" style={{ marginLeft: indent }}>{close}</span>}
+      {!collapsed && <span className="text-slate-500" style={{ marginLeft: indent }}>{close}</span>}
     </span>
   );
 }
 
 export default function RestExplorer({ org }) {
-  const [method,   setMethod]   = useState("GET");
-  const [path,     setPath]     = useState(DEFAULT_PATH);
-  const [body,     setBody]     = useState("");
-  const [response, setResponse] = useState(null);   // { status, headers, body }
-  const [loading,  setLoading]  = useState(false);
-  const [rawMode,  setRawMode]  = useState(false);
-  const [history,  setHistory]  = useState(_history);
-  const [histOpen, setHistOpen] = useState(false);
+  const [method,    setMethod]   = useState("GET");
+  const [path,      setPath]     = useState(DEFAULT_PATH);
+  const [body,      setBody]     = useState("");
+  const [response,  setResponse] = useState(null);   // { status, headers, body }
+  const [loading,   setLoading]  = useState(false);
+  const [rawMode,   setRawMode]  = useState(false);
+  const [history,   setHistory]  = useState(_history);
+  const [histOpen,  setHistOpen] = useState(false);
+  const [helpOpen,  setHelpOpen] = useState(false);
   const pathRef = useRef(null);
 
   const needsBody = ["POST", "PUT", "PATCH"].includes(method);
@@ -109,29 +231,7 @@ export default function RestExplorer({ org }) {
   }
 
   async function execute() {
-    if (!org) return;
-    setLoading(true);
-    setResponse(null);
-    try {
-      const result = await api(`/api/orgs/${org.alias}/rest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          method,
-          path,
-          body: needsBody && body.trim() ? body.trim() : null,
-        }),
-      });
-      setResponse(result);
-      // Add to history
-      const entry = { method, path, ts: Date.now() };
-      _history = [entry, ..._history.filter(h => h.path !== path || h.method !== method)].slice(0, 50);
-      setHistory(_history);
-    } catch (e) {
-      setResponse({ status: 0, headers: {}, body: { error: e.message } });
-    } finally {
-      setLoading(false);
-    }
+    executeWith(method, path, needsBody && body.trim() ? body.trim() : null);
   }
 
   function loadHistory(entry) {
@@ -140,11 +240,45 @@ export default function RestExplorer({ org }) {
     setHistOpen(false);
   }
 
+  function loadSample(item) {
+    setMethod(item.method);
+    setPath(item.path);
+    setBody("");
+    setRawMode(false);
+    // Auto-execute after a tick so state has settled
+    setTimeout(() => executeWith(item.method, item.path, null), 0);
+  }
+
+  async function executeWith(m, p, b) {
+    if (!org) return;
+    setLoading(true);
+    setResponse(null);
+    try {
+      const result = await api(`/api/orgs/${org.alias}/rest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method: m, path: p, body: b }),
+      });
+      setResponse(result);
+      const entry = { method: m, path: p, ts: Date.now() };
+      _history = [entry, ..._history.filter(h => h.path !== p || h.method !== m)].slice(0, 50);
+      setHistory(_history);
+    } catch (e) {
+      setResponse({ status: 0, headers: {}, body: { error: e.message } });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <>
+      {helpOpen && (
+        <HelpModal onClose={() => setHelpOpen(false)} onLoad={loadSample} />
+      )}
+    <div className="flex flex-col h-full overflow-hidden bg-white text-gray-900">
 
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      <div className="shrink-0 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex flex-col gap-2">
+      <div className="shrink-0 border-b border-slate-200 px-4 py-3 flex flex-col gap-2">
 
         {/* Method + URL row */}
         <div className="flex gap-2 items-center">
@@ -215,6 +349,15 @@ export default function RestExplorer({ org }) {
             )}
           </div>
 
+          {/* Help */}
+          <button
+            onClick={() => setHelpOpen(true)}
+            title="How to use & sample requests"
+            className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors shrink-0"
+          >
+            ?
+          </button>
+
           {/* Execute */}
           <button
             onClick={execute}
@@ -260,10 +403,12 @@ export default function RestExplorer({ org }) {
         {response && (
           <>
             {/* Response status bar */}
-            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-white">
               <div className="flex items-center gap-3">
                 <span className={`font-bold text-sm ${STATUS_COLOR(response.status)}`}>
-                  {response.status || "Error"}
+                  {response.status
+                    ? `HTTP ${response.status}${STATUS_TEXT[response.status] ? ` — ${STATUS_TEXT[response.status]}` : ""}`
+                    : "Error"}
                 </span>
                 <span className="text-xs text-gray-500 dark:text-gray-400">
                   {response.headers?.["content-type"] || ""}
@@ -277,7 +422,7 @@ export default function RestExplorer({ org }) {
                       : JSON.stringify(response.body, null, 2);
                     navigator.clipboard?.writeText(text);
                   }}
-                  className="text-xs px-2.5 py-1 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  className="text-xs px-2.5 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
                 >
                   Copy
                 </button>
@@ -285,8 +430,8 @@ export default function RestExplorer({ org }) {
                   onClick={() => setRawMode(r => !r)}
                   className={`text-xs px-2.5 py-1 rounded border transition-colors ${
                     rawMode
-                      ? "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
-                      : "border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      ? "bg-blue-100 text-blue-700 border-blue-200"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   Raw
@@ -296,7 +441,7 @@ export default function RestExplorer({ org }) {
 
             {/* Response body */}
             <div
-              className="flex-1 overflow-auto p-4 font-mono text-xs bg-gray-950 dark:bg-gray-950 text-gray-100"
+              className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50 text-slate-800"
               onClick={handleResponseClick}
             >
               {rawMode || typeof response.body === "string" ? (
@@ -313,5 +458,6 @@ export default function RestExplorer({ org }) {
         )}
       </div>
     </div>
+    </>
   );
 }
