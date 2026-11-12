@@ -504,7 +504,7 @@ export default function ClaudeChat({ org, ctx, setCtx }) {
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.length === 0 && (
           <div className="text-center mt-12 text-sm px-6">
-            <img src="/icon-128.png" alt="Vendavis" className="w-12 h-12 object-contain mx-auto mb-4" />
+            <img src="/icon-128.png" alt="Avio" className="w-12 h-12 object-contain mx-auto mb-4" />
             <p className="font-semibold text-white text-base">Ask me anything about your Salesforce org.</p>
             <p className="text-slate-400 text-xs mt-2">I know all the objects and fields loaded in this session.</p>
             <div className="mt-6 grid grid-cols-2 gap-2 max-w-sm mx-auto">

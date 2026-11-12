@@ -96,9 +96,9 @@ export default function OrgPickerModal({ onSelect }) {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-[420px] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-[#1a2d5a] px-6 py-4 flex items-center gap-3">
-          <img src="/icon-32.png" alt="Vendavis" className="w-7 h-7 object-contain shrink-0" />
+          <img src="/icon-32.png" alt="Avio" className="w-7 h-7 object-contain shrink-0" />
           <div>
-            <h1 className="text-base font-bold text-white leading-tight">Vendavis</h1>
+            <h1 className="text-base font-bold text-white leading-tight">Avio</h1>
             <p className="text-xs text-blue-200">Select a Salesforce org to get started</p>
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function OrgPickerModal({ onSelect }) {
               <div>
                 <p className="text-sm font-semibold text-red-700 dark:text-red-400">Salesforce CLI not found</p>
                 <p className="text-xs text-red-600 dark:text-red-400 mt-1 leading-relaxed">
-                  The <code className="font-mono bg-red-100 dark:bg-red-900/40 px-1 rounded">sf</code> CLI is required and must be installed on your PATH before launching Vendavis.
+                  The <code className="font-mono bg-red-100 dark:bg-red-900/40 px-1 rounded">sf</code> CLI is required and must be installed on your PATH before launching Avio.
                 </p>
                 <p className="text-xs text-red-500 dark:text-red-500 mt-2">
                   See <strong>Help → Pre-Requisites</strong> for install instructions.

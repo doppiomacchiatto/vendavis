@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const STORAGE_KEY = "vendavis_welcome_seen_v1";
+const STORAGE_KEY = "avio_welcome_seen_v1";
 
 const TABS = [
   { id: "fls",      label: "🔍 FLS Explorer" },
@@ -30,7 +30,7 @@ function FlsTab() {
           {[
             ["🔎", "Audit field access",       "See every profile's and permission set's read/edit access to every field on any object — in one view."],
             ["📋", "Build a permissions template", "Export field access to Excel. The template is structured so you can define a new profile or permission set row by row."],
-            ["🔄", "Apply changes (MVP-1)",    "Import a filled template back into Vendavis to deploy the Profile or Permission Set directly to your org."],
+            ["🔄", "Apply changes (MVP-1)",    "Import a filled template back into Avio to deploy the Profile or Permission Set directly to your org."],
           ].map(([icon, title, desc]) => (
             <div key={title} className="flex gap-3 px-3.5 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
               <span className="text-lg shrink-0 mt-0.5">{icon}</span>
@@ -108,7 +108,7 @@ function ProfilesTab() {
       <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3 text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
         <span className="font-semibold">Profiles vs. Permission Sets:</span> Salesforce
         recommends keeping profiles minimal (baseline access only) and granting additional
-        access through Permission Sets. Vendavis makes it easy to spot when a profile is
+        access through Permission Sets. Avio makes it easy to spot when a profile is
         doing too much.
       </div>
     </div>
@@ -138,8 +138,8 @@ export default function WelcomeModal({ onClose }) {
           <div className="flex items-start justify-between mb-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <img src="/icon-32.png" alt="Vendavis" className="w-7 h-7 object-contain" />
-                <h2 className="text-xl font-bold text-white tracking-tight">Welcome to Vendavis</h2>
+                <img src="/icon-32.png" alt="Avio" className="w-7 h-7 object-contain" />
+                <h2 className="text-xl font-bold text-white tracking-tight">Welcome to Avio</h2>
               </div>
               <p className="text-xs text-blue-300 leading-relaxed">
                 Unofficial Salesforce metadata explorer — audit, compare, and template

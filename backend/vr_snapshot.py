@@ -3,7 +3,7 @@ Persistent "restore snapshot" for the Validation Rules bulk Disable All.
 
 Remembers which rules were active before a bulk disable, so Restore still works
 after switching objects/tabs or restarting the app. Stored as JSON in
-~/.vendavis_vr_snapshots.json:
+~/.avio_vr_snapshots.json:
 
 {
   "version": 1,
@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-SNAPSHOT_PATH = Path.home() / ".vendavis_vr_snapshots.json"
+SNAPSHOT_PATH = Path.home() / ".avio_vr_snapshots.json"
 _lock = threading.Lock()
 
 

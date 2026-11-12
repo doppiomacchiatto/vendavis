@@ -8,8 +8,8 @@ custom gateways, etc.).
 Config priority (highest → lowest):
   1. opencode.config.json  in project root (developer override)
   2. OPENCODE_API_KEY / OPENCODE_BASE_URL / OPENCODE_MODEL env vars
-  3. ~/.vendavis_api_key   (written by Vendavis Settings modal)
-  4. ~/.vendavis_config.json  model / base_url fields
+  3. ~/.avio_api_key   (written by Avio Settings modal)
+  4. ~/.avio_config.json  model / base_url fields
   5. Legacy ~/.sf_tools_config.json  (old SOQL Explorer config)
 """
 from __future__ import annotations
@@ -24,8 +24,8 @@ import openai
 DEFAULT_MODEL   = "gpt-4o"
 MAX_TOKENS      = 4096
 
-CONFIG_PATH      = Path.home() / ".vendavis_config.json"
-API_KEY_PATH     = Path.home() / ".vendavis_api_key"
+CONFIG_PATH      = Path.home() / ".avio_config.json"
+API_KEY_PATH     = Path.home() / ".avio_api_key"
 OPENCODE_GATEWAY_URL = "https://opencode.ai/inference/openai/v1"
 LEGACY_CFG_PATH  = Path.home() / ".sf_tools_config.json"
 
@@ -52,7 +52,7 @@ def _load_opencode_config() -> dict:
     return {}
 
 
-def _load_vendavis_config() -> dict:
+def _load_avio_config() -> dict:
     try:
         if CONFIG_PATH.exists():
             return json.loads(CONFIG_PATH.read_text())
@@ -71,8 +71,8 @@ def _load_legacy_config() -> dict:
 
 
 def save_config(model: str = "", base_url: str = "") -> None:
-    """Merge model/base_url into ~/.vendavis_config.json."""
-    cfg = _load_vendavis_config()
+    """Merge model/base_url into ~/.avio_config.json."""
+    cfg = _load_avio_config()
     if model:
         cfg["model"] = model
     if base_url is not None:
@@ -90,7 +90,7 @@ def _load_api_key() -> str:
     key = os.environ.get("OPENCODE_API_KEY", "") or os.environ.get("ANTHROPIC_API_KEY", "")
     if key:
         return key.strip()
-    # 3. ~/.vendavis_api_key
+    # 3. ~/.avio_api_key
     if API_KEY_PATH.exists():
         key = API_KEY_PATH.read_text().strip()
         if key:
@@ -108,7 +108,7 @@ def _load_api_key() -> str:
         return key
     raise RuntimeError(
         "No AI API key found. Set OPENCODE_API_KEY env var, "
-        "add it to opencode.config.json, write it to ~/.vendavis_api_key, "
+        "add it to opencode.config.json, write it to ~/.avio_api_key, "
         "or open ⚙ Settings."
     )
 
@@ -121,7 +121,7 @@ def _load_base_url() -> str:
     url = os.environ.get("OPENCODE_BASE_URL", "")
     if url:
         return url.strip()
-    cfg = _load_vendavis_config()
+    cfg = _load_avio_config()
     url = cfg.get("base_url", "").strip()
     if url:
         return url
@@ -146,7 +146,7 @@ def _load_model() -> str:
     model = os.environ.get("OPENCODE_MODEL", "")
     if model:
         return model.strip()
-    cfg = _load_vendavis_config()
+    cfg = _load_avio_config()
     return cfg.get("model", "").strip() or DEFAULT_MODEL
 
 

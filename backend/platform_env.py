@@ -1,7 +1,7 @@
 """
-platform_env.py — OS-specific environment helpers for Vendavis.
+platform_env.py — OS-specific environment helpers for Avio.
 
-When Vendavis runs as a packaged .app / .exe / AppImage, the process
+When Avio runs as a packaged .app / .exe / AppImage, the process
 inherits a minimal PATH from the OS launcher rather than the shell the
 developer normally works in.  This module provides an abstract interface
 so each platform can supply:

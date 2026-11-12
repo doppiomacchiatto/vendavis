@@ -46,7 +46,7 @@ export default function App() {
     listen("app:close-requested", () => {
       setQuitConfirm(true);
     }).then((fn) => { unlistenClose = fn; });
-    // macOS "About Vendavis" menu item → open our in-app About modal
+    // macOS "About Avio" menu item → open our in-app About modal
     listen("app:open-about", () => {
       setHelpTab("about");
       setAboutOpen(true);
@@ -117,7 +117,7 @@ export default function App() {
   const [modelsNote,    setModelsNote]    = useState("");
   const [settingsSaved, setSettingsSaved] = useState("");   // "" | "saved" | "error:<msg>"
   const [settingsKeySet,setSettingsKeySet]= useState(false);
-  const [settingsKeySource, setSettingsKeySource] = useState("none"); // "vendavis"|"legacy"|"none"
+  const [settingsKeySource, setSettingsKeySource] = useState("none"); // "avio"|"legacy"|"none"
 
   // Fetch current settings when modal opens
   useEffect(() => {
@@ -258,7 +258,7 @@ export default function App() {
               </div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Stop background processes?</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-                Vendavis is running a local data service. Closing the app will stop it — any in-progress exports or queries will be cancelled.
+                Avio is running a local data service. Closing the app will stop it — any in-progress exports or queries will be cancelled.
               </p>
             </div>
             {/* Actions */}
@@ -283,8 +283,8 @@ export default function App() {
       {/* Top bar */}
       <header className="flex items-center gap-4 px-4 py-2 bg-[#1a2d5a] text-white shadow-md select-none">
         <div className="flex items-center gap-2">
-          <img src="/icon-32.png" alt="Vendavis" className="w-6 h-6 object-contain" />
-          <span className="font-bold text-lg tracking-tight">Vendavis</span>
+          <img src="/icon-32.png" alt="Avio" className="w-6 h-6 object-contain" />
+          <span className="font-bold text-lg tracking-tight">Avio</span>
         </div>
         <span className="text-xs text-blue-300 font-normal tracking-wide">Unofficial Salesforce Tool</span>
         <div className="ml-auto flex items-center gap-3">
@@ -321,7 +321,7 @@ export default function App() {
                   onClick={() => { setHelpTab("about"); setAboutOpen(true); }}
                   className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
                 >
-                  About Vendavis
+                  About Avio
                 </button>
                 <div className="border-t border-gray-100 dark:border-gray-700" />
                 <button
@@ -474,8 +474,8 @@ export default function App() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <img src="/icon-32.png" alt="Vendavis" className="w-8 h-8 object-contain" />
-                    <h2 className="text-xl font-bold text-white tracking-tight">Vendavis</h2>
+                    <img src="/icon-32.png" alt="Avio" className="w-8 h-8 object-contain" />
+                    <h2 className="text-xl font-bold text-white tracking-tight">Avio</h2>
                   </div>
                   <p className="text-xs text-blue-200 italic leading-relaxed">
                     From Latin <span className="text-blue-100 font-medium">vendo</span> (to reveal, expose) + <span className="text-blue-100 font-medium">avis</span> (bird, explorer)
@@ -510,17 +510,17 @@ export default function App() {
                     </div>
                     <div className="flex gap-4 text-xs">
                       <div className="flex flex-col items-center px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800">
-                        <span className="font-bold text-blue-700 dark:text-blue-300 text-sm">vendo</span>
-                        <span className="text-blue-500 dark:text-blue-400 italic mt-0.5">to reveal, to expose</span>
-                      </div>
-                      <div className="flex items-center text-gray-400 text-lg font-light">+</div>
-                      <div className="flex flex-col items-center px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800">
                         <span className="font-bold text-blue-700 dark:text-blue-300 text-sm">avis</span>
-                        <span className="text-blue-500 dark:text-blue-400 italic mt-0.5">bird, explorer</span>
+                        <span className="text-blue-500 dark:text-blue-400 italic mt-0.5">Latin — bird</span>
+                      </div>
+                      <div className="flex items-center text-gray-400 text-lg font-light">→</div>
+                      <div className="flex flex-col items-center px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800">
+                        <span className="font-bold text-blue-700 dark:text-blue-300 text-sm">Avio</span>
+                        <span className="text-blue-500 dark:text-blue-400 italic mt-0.5">the scout</span>
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 italic leading-relaxed mt-0.5">
-                      "The bird that reveals what's hidden" — a scout that sees what others can't, bringing hidden structure into the light.
+                      A scout that sees what others can't — bringing hidden Salesforce structure into the light.
                     </p>
                   </div>
                   <span className="shrink-0 text-xs font-mono text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded self-start">v{appVersion} Beta</span>
@@ -597,7 +597,7 @@ export default function App() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">How it works</p>
                   <div className="flex flex-col gap-2">
                     {[
-                      ["🔐", "Authentication", "Vendavis never stores your Salesforce credentials. It uses the sessions you've already authenticated with the sf CLI — run sf org login web to add a new org."],
+                      ["🔐", "Authentication", "Avio never stores your Salesforce credentials. It uses the sessions you've already authenticated with the sf CLI — run sf org login web to add a new org."],
                       ["📡", "Data flow", "All Salesforce data stays on your machine. The backend calls the sf CLI, which calls Salesforce's REST API, then returns the result to the frontend. Nothing is sent to any third-party server."],
                       ["🤖", "OpenCode AI", "AI features connect to the OpenCode gateway (or any OpenAI-compatible provider) using the API key in Settings. Org metadata is included in the prompt only when you actively use an AI feature."],
                       ["📦", "Bundled runtime", "The Python backend is compiled into a self-contained binary by PyInstaller — no Python installation required on the end-user machine."],
@@ -639,7 +639,7 @@ export default function App() {
                     <div className="flex flex-col gap-1">
                       <p className="font-semibold text-gray-800 dark:text-white text-sm">Salesforce CLI <span className="text-red-500 text-xs font-bold ml-1">Required</span></p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                        Vendavis uses the <code className="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">sf</code> CLI to communicate with your Salesforce orgs. It must be installed and available on your system PATH.
+                        Avio uses the <code className="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">sf</code> CLI to communicate with your Salesforce orgs. It must be installed and available on your system PATH.
                       </p>
                       <div className="mt-1 flex flex-col gap-1">
                         <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Install:</p>
@@ -663,7 +663,7 @@ export default function App() {
                     <div className="flex flex-col gap-1">
                       <p className="font-semibold text-gray-800 dark:text-white text-sm">Authenticated Org <span className="text-red-500 text-xs font-bold ml-1">Required</span></p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                        At least one Salesforce org must be authenticated with the CLI before launching Vendavis.
+                        At least one Salesforce org must be authenticated with the CLI before launching Avio.
                       </p>
                       <div className="mt-1 flex flex-col gap-1">
                         <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Authenticate:</p>
@@ -718,7 +718,7 @@ export default function App() {
               <label className="flex flex-col gap-1">
                 <span className="font-medium text-gray-700 dark:text-gray-300">
                   API Key
-                  {settingsKeySet && settingsKeySource === "vendavis" && (
+                  {settingsKeySet && settingsKeySource === "avio" && (
                     <span className="ml-2 text-xs text-green-500 font-normal">✓ key saved</span>
                   )}
                   {settingsKeySet && settingsKeySource === "legacy" && (
@@ -823,7 +823,7 @@ export default function App() {
                 <strong className="text-gray-800 dark:text-white">Daily API Requests</strong> is Salesforce's main governor limit.
                 Every REST API call, SOQL query via the API, and Apex execution counts against your org's daily allocation. The limit resets at midnight GMT.
               </p>
-              <p><strong className="text-gray-800 dark:text-white">How Vendavis uses API calls:</strong></p>
+              <p><strong className="text-gray-800 dark:text-white">How Avio uses API calls:</strong></p>
               <ul className="flex flex-col gap-1.5 pl-4 text-xs">
                 {[
                   ["Load Objects",            "1 call — sf data query (EntityDefinition)"],
@@ -842,7 +842,7 @@ export default function App() {
               <p className="text-xs text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-3">
                 💡 Most orgs have 15,000–1,000,000+ daily API calls depending on their Salesforce edition and add-ons.
                 If you hit the limit, all API calls return a 403 error until midnight GMT.
-                Vendavis caches FLS data in memory for 5 minutes to minimise repeat calls.
+                Avio caches FLS data in memory for 5 minutes to minimise repeat calls.
               </p>
             </div>
           </div>

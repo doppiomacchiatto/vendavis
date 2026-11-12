@@ -59,7 +59,7 @@ function AiPanel({ code, lastLog, onInsert, onClose }) {
   }, [messages, streamBuf]);
 
   function buildSystemPrompt() {
-    let sys = `You are an expert Salesforce Apex developer embedded in Vendavis, a Salesforce metadata tool.
+    let sys = `You are an expert Salesforce Apex developer embedded in Avio, a Salesforce metadata tool.
 Help the user write, debug, and improve Apex code.
 When providing code, wrap it in a \`\`\`apex code block.
 Be concise and direct. No need to repeat the question.`;

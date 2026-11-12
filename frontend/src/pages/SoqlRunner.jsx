@@ -33,7 +33,7 @@ function AiPanel({ query, results, onInsert, onClose }) {
   }, [messages, streamBuf]);
 
   function buildSystem() {
-    let sys = `You are an expert Salesforce SOQL developer embedded in Vendavis.
+    let sys = `You are an expert Salesforce SOQL developer embedded in Avio.
 Help the user write, debug, and optimize SOQL queries.
 When providing a query, wrap it in a \`\`\`soql code block.
 Be concise and direct.`;

@@ -31,9 +31,9 @@ from sf_cli import _sf as _sf_raw   # for raw SOQL
 import vr_snapshot
 from excel_builder import build_excel
 from query_history import _qh_save, _qh_load
-from ai_client import AIClient, PROVIDER_PRESETS, fetch_models, needs_key, save_config, _load_vendavis_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config
+from ai_client import AIClient, PROVIDER_PRESETS, fetch_models, needs_key, save_config, _load_avio_config as _load_config, _load_api_key, _load_base_url, _load_legacy_config
 
-app = FastAPI(title="Vendavis", version="2.0.0")
+app = FastAPI(title="Avio", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -109,7 +109,7 @@ def get_settings():
         key_set = True
     except Exception:
         pass
-    # Surface the effective base_url (vendavis config takes priority, then legacy)
+    # Surface the effective base_url (avio config takes priority, then legacy)
     effective_url = cfg.get("base_url", "").strip() or legacy.get("base_url", "").strip()
     if not needs_key(effective_url):
         key_set = True   # local servers (Ollama etc.) run without a key
@@ -119,7 +119,7 @@ def get_settings():
         "model":         cfg.get("model", ""),
         "base_url":      effective_url,
         "models":        AVAILABLE_MODELS,
-        "key_source":    "vendavis" if (Path.home() / ".vendavis_api_key").exists() else
+        "key_source":    "avio" if (Path.home() / ".avio_api_key").exists() else
                          ("legacy" if legacy.get("api_key") else "none"),
     }
 
@@ -143,9 +143,9 @@ def post_models(req: ModelsRequest):
 
 @app.post("/api/settings")
 def post_settings(req: SettingsRequest):
-    # Persist API key to ~/.vendavis_api_key
+    # Persist API key to ~/.avio_api_key
     if req.api_key is not None:
-        key_path = Path.home() / ".vendavis_api_key"
+        key_path = Path.home() / ".avio_api_key"
         if req.api_key.strip():
             key_path.write_text(req.api_key.strip())
         # Blank key = don't overwrite existing

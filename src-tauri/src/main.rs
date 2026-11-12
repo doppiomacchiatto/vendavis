@@ -181,12 +181,12 @@ async fn api_post(
     Ok(result)
 }
 
-/// Build the macOS app menu, replacing the native "About Vendavis" item with
+/// Build the macOS app menu, replacing the native "About Avio" item with
 /// one that emits our custom event so the in-app modal opens instead.
 #[cfg(target_os = "macos")]
 fn build_app_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    // "Vendavis" application menu (left-most on macOS menu bar)
-    let about_item = MenuItem::with_id(app, "about", "About Vendavis", true, None::<&str>)?;
+    // "Avio" application menu (left-most on macOS menu bar)
+    let about_item = MenuItem::with_id(app, "about", "About Avio", true, None::<&str>)?;
     let separator  = PredefinedMenuItem::separator(app)?;
     let hide       = PredefinedMenuItem::hide(app, None)?;
     let hide_others = PredefinedMenuItem::hide_others(app, None)?;
@@ -195,7 +195,7 @@ fn build_app_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     let app_menu = Submenu::with_items(
         app,
-        "Vendavis",
+        "Avio",
         true,
         &[
             &about_item,
@@ -337,7 +337,7 @@ fn main() {
             restart_backend
         ]);
 
-    // macOS: replace the native "About Vendavis" menu item with one that
+    // macOS: replace the native "About Avio" menu item with one that
     // opens our custom in-app About modal instead of the system dialog.
     #[cfg(target_os = "macos")]
     {

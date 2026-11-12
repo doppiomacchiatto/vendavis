@@ -1,5 +1,5 @@
 {
-  "_comment": "OpenCode provider configuration for Vendavis. Copy this file and fill in your values. All fields are optional — unset fields fall back to env vars or the Settings modal.",
+  "_comment": "OpenCode provider configuration for Avio. Copy this file and fill in your values. All fields are optional — unset fields fall back to env vars or the Settings modal.",
 
   "provider": "openai",
 

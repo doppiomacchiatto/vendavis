@@ -1,7 +1,7 @@
 {
-  "productName": "Vendavis",
+  "productName": "Avio",
   "version": "1.0.1",
-  "identifier": "com.vendavis.app",
+  "identifier": "com.avio.app",
   "build": {
     "beforeDevCommand": "npm run dev:frontend",
     "devUrl": "http://localhost:5173",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Vendavis",
+        "title": "Avio",
         "width": 1400,
         "height": 900,
         "minWidth": 900,

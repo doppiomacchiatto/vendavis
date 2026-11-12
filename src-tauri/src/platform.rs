@@ -1,4 +1,4 @@
-/// platform.rs — OS-specific process and environment operations for Vendavis.
+/// platform.rs — OS-specific process and environment operations for Avio.
 ///
 /// Mirrors the design of `backend/platform_env.py`: a trait defines the
 /// interface every OS must implement, and concrete structs provide the
@@ -113,7 +113,7 @@ mod job {
     static JOB: OnceLock<Option<Job>> = OnceLock::new();
 
     /// Process-wide job with KILL_ON_JOB_CLOSE. The handle is never closed
-    /// explicitly: when Vendavis exits for any reason the OS closes it and
+    /// explicitly: when Avio exits for any reason the OS closes it and
     /// kills every process still in the job.
     pub fn get() -> io::Result<&'static Job> {
         JOB.get_or_init(create)

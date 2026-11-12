@@ -27,7 +27,7 @@ export default class ErrorBoundary extends Component {
             Something went wrong
           </h1>
           <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
-            Vendavis hit an unexpected error. Your Salesforce data was not modified.
+            Avio hit an unexpected error. Your Salesforce data was not modified.
           </p>
           <p className="mt-3 text-sm font-mono break-words text-gray-900 dark:text-gray-100">
             {message}
