@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import Spinner from "./Spinner";
-import { debugLog } from "../debugLog";
+import { debugLog, useDebugLog } from "../debugLog";
+import DebugLogModal from "./DebugLogModal";
 
 export default function OrgPickerModal({ onSelect }) {
   const [orgs,          setOrgs]          = useState([]);
@@ -10,6 +11,8 @@ export default function OrgPickerModal({ onSelect }) {
   const [chosen,        setChosen]        = useState("");
   const [startupStatus, setStartupStatus] = useState("starting"); // "starting" | "ready" | null
   const [slowStart,     setSlowStart]     = useState(false);
+  const [debugOpen,     setDebugOpen]     = useState(false);
+  const debugEntries = useDebugLog();
 
   function addLog(msg, level = "info") {
     debugLog(`[OrgPicker] ${msg}`, level);
@@ -191,8 +194,18 @@ export default function OrgPickerModal({ onSelect }) {
           Connect to org
         </button>
 
+        {/* Debug link — always accessible even during startup */}
+        <button
+          onClick={() => setDebugOpen(true)}
+          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-center w-full mt-1 transition-colors"
+        >
+          🐞 Debug log{debugEntries.length > 0 ? ` (${debugEntries.length})` : ""}
+        </button>
+
         </div>{/* end inner p-6 */}
       </div>
+
+      {debugOpen && <DebugLogModal onClose={() => setDebugOpen(false)} />}
     </div>
   );
 }
