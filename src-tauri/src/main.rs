@@ -85,6 +85,14 @@ fn start_backend(port: u16, app_handle: Option<&tauri::AppHandle>) -> Option<Chi
 // Tauri commands
 // ---------------------------------------------------------------------------
 
+/// Write arbitrary text content to a user-chosen path.
+/// Called after the frontend has shown a native Save dialog.
+#[tauri::command]
+fn write_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, content.as_bytes())
+        .map_err(|e| format!("Could not write '{}': {}", path, e))
+}
+
 /// Open a file with the OS default application
 #[tauri::command]
 fn open_file(path: String) -> Result<(), String> {
@@ -203,6 +211,60 @@ fn build_app_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     Menu::with_items(app, &[&app_menu])
 }
 
+/// Restart the FastAPI backend and wait until it answers /api/health again.
+/// - Production: kill the tracked child tree, respawn it.
+/// - Dev:        bump main.py's mtime so `uvicorn --reload` restarts the worker
+///               (POSTing /api/shutdown would kill the whole reloader instead).
+/// Returns Ok(port) when the backend is back up, Err(msg) if it times out.
+#[tauri::command]
+async fn restart_backend(
+    app: tauri::AppHandle,
+    backend: tauri::State<'_, BackendProcess>,
+    port_state: tauri::State<'_, BackendPort>,
+) -> Result<u16, String> {
+    let port = port_state.0;
+
+    if cfg!(debug_assertions) {
+        let main_py = project_root().join("backend").join("main.py");
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&main_py)
+            .and_then(|f| f.set_modified(std::time::SystemTime::now()))
+            .map_err(|e| format!("Could not touch '{}': {}", main_py.display(), e))?;
+        // Give the watcher a moment to detect the change and start reloading
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    } else {
+        let plat = platform::get_platform();
+        if let Ok(mut guard) = backend.0.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = plat.kill_process_tree(&mut child);
+                let _ = child.wait();
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        match start_backend(port, Some(&app)) {
+            Some(child) => {
+                if let Ok(mut guard) = backend.0.lock() {
+                    *guard = Some(child);
+                }
+            }
+            None => return Err("Failed to start backend process".to_string()),
+        }
+    }
+
+    // Poll /api/health until the backend is back (up to 20 s, 400 ms apart)
+    let health_url = format!("http://127.0.0.1:{}/api/health", port);
+    for _ in 0..50 {
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        if let Ok(resp) = reqwest::get(&health_url).await {
+            if resp.status().is_success() {
+                return Ok(port);
+            }
+        }
+    }
+    Err("Backend did not come back online within 20 seconds".to_string())
+}
+
 /// Called by the frontend when the user confirms they want to quit.
 /// Tells the backend to shut down gracefully, then kills the process group
 /// and exits the application.
@@ -270,7 +332,9 @@ fn main() {
             api_get,
             api_post,
             open_file,
-            confirm_close
+            write_file,
+            confirm_close,
+            restart_backend
         ]);
 
     // macOS: replace the native "About Vendavis" menu item with one that
