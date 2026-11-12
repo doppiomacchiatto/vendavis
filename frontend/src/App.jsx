@@ -734,136 +734,142 @@ export default function App() {
 
       {/* ── Settings modal ───────────────────────────────────────────────────── */}
       {settingsOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-stretch justify-center z-50 backdrop-blur-sm py-8 px-4" onClick={() => setSettingsOpen(false)}>
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
-            {/* Sticky header */}
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-700 shrink-0">
-              <h2 className="text-base font-bold text-gray-800 dark:text-white">AI Settings</h2>
-              <button onClick={() => setSettingsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none">✕</button>
-            </div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-6" onClick={() => setSettingsOpen(false)}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md flex flex-col" style={{height: "min(680px, calc(100vh - 3rem))"}} onClick={(e) => e.stopPropagation()}>
 
-            {/* Body */}
-            <div className="flex flex-col gap-4 text-sm px-6 py-4 flex-1 min-h-0">
-              {/* Provider preset */}
-              <label className="flex flex-col gap-1">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Provider</span>
-                <select
-                  value={activeProvider?.id || ""}
-                  onChange={(e) => pickProvider(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                >
-                  <option value="">Auto (OpenCode key → OpenCode, otherwise OpenAI)</option>
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id}>{p.label}</option>
-                  ))}
-                </select>
-              </label>
-
-              {/* API Key */}
-              <label className="flex flex-col gap-1">
-                <span className="font-medium text-gray-700 dark:text-gray-300">
-                  API Key
-                  {settingsKeySet && settingsKeySource === "avio" && (
-                    <span className="ml-2 text-xs text-green-500 font-normal">✓ key saved</span>
-                  )}
-                  {settingsKeySet && settingsKeySource === "legacy" && (
-                    <span className="ml-2 text-xs text-yellow-500 font-normal">✓ using key from SOQL Explorer config</span>
-                  )}
-                </span>
-                <input
-                  type="password"
-                  placeholder={
-                    activeProvider?.needs_key === false ? "Not needed for a local server"
-                    : settingsKeySet ? "••••••••••••••••••••••••"
-                    : activeProvider?.key_hint || "oc_sk_… (OpenCode) or sk-… (OpenAI)"
-                  }
-                  value={settingsDraft.api_key}
-                  onChange={(e) => setSettingsDraft((d) => ({ ...d, api_key: e.target.value }))}
-                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
-                  autoComplete="off"
-                />
-              </label>
-
-              {/* Gateway URL */}
-              <label className="flex flex-col gap-1">
-                <span className="font-medium text-gray-700 dark:text-gray-300">
-                  Gateway URL
-                  <span className="ml-1 text-xs text-gray-400 font-normal">(filled in by Provider; edit for a custom gateway)</span>
-                </span>
-                <input
-                  type="text"
-                  placeholder="https://…"
-                  value={settingsDraft.base_url}
-                  onChange={(e) => setSettingsDraft((d) => ({ ...d, base_url: e.target.value }))}
-                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
-                />
-              </label>
-
-              {/* Model picklist */}
-              <label className="flex flex-col gap-1">
-                <span className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                  Model
+            {/* Header — title + tabs + close */}
+            <div className="shrink-0 px-6 pt-5 pb-0 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-bold text-gray-800 dark:text-white">AI Settings</h2>
+                <button onClick={() => setSettingsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg leading-none">✕</button>
+              </div>
+              <div className="flex gap-1 -mb-px">
+                {[["model", "AI Model"], ["skills", "🧠 Skills"]].map(([id, label]) => (
                   <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); refreshModels(); }}
-                    disabled={modelsLoading}
-                    className="text-xs font-normal text-blue-600 hover:text-blue-700 disabled:opacity-50"
-                    title="Fetch the model list from your provider using the key and gateway above"
+                    key={id}
+                    onClick={() => setSkillsOpen(id === "skills")}
+                    className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+                      (id === "skills") === skillsOpen
+                        ? "border-blue-600 text-blue-600 dark:text-blue-400"
+                        : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    }`}
                   >
-                    {modelsLoading ? "Fetching…" : "↻ Refresh list"}
+                    {label}
+                    {id === "skills" && (
+                      <span className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                        settingsDraft.skills_enabled
+                          ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                          : "bg-gray-200 text-gray-500 dark:bg-gray-600 dark:text-gray-400"
+                      }`}>
+                        {settingsDraft.skills_enabled ? "On" : "Off"}
+                      </span>
+                    )}
                   </button>
-                </span>
-                <select
-                  value={settingsDraft.model}
-                  onChange={(e) => setSettingsDraft((d) => ({ ...d, model: e.target.value }))}
-                  className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                >
-                  <option value="">Default (from opencode.config.json or gpt-4o)</option>
-                  {settingsDraft.model && !availModels.some((m) => m.id === settingsDraft.model) && (
-                    <option value={settingsDraft.model}>{settingsDraft.model} (current)</option>
-                  )}
-                  {availModels.map((m) => (
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  ))}
-                </select>
-                {modelsNote && <span className="text-xs text-gray-400">{modelsNote}</span>}
-              </label>
+                ))}
+              </div>
             </div>
 
-            {/* Skills section */}
-            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-              {/* Collapsible header */}
-              <button
-                type="button"
-                onClick={() => setSkillsOpen(o => !o)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">🧠 Salesforce Skills</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                    settingsDraft.skills_enabled
-                      ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
-                      : "bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
-                  }`}>
-                    {settingsDraft.skills_enabled ? "On" : "Off"}
-                  </span>
-                </div>
-                <span className="text-gray-400 text-xs">{skillsOpen ? "▲" : "▼"}</span>
-              </button>
+            {/* Tab: AI Model */}
+            {!skillsOpen && (
+              <div className="flex flex-col gap-4 text-sm px-6 py-5 overflow-y-auto flex-1 min-h-0">
+                <label className="flex flex-col gap-1">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Provider</span>
+                  <select
+                    value={activeProvider?.id || ""}
+                    onChange={(e) => pickProvider(e.target.value)}
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">Auto (OpenCode key → OpenCode, otherwise OpenAI)</option>
+                    {providers.map((p) => (
+                      <option key={p.id} value={p.id}>{p.label}</option>
+                    ))}
+                  </select>
+                </label>
 
-              {skillsOpen && (
-                <div className="px-4 py-4 flex flex-col gap-3 text-sm border-t border-gray-200 dark:border-gray-700">
+                <label className="flex flex-col gap-1">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">
+                    API Key
+                    {settingsKeySet && settingsKeySource === "avio" && (
+                      <span className="ml-2 text-xs text-green-500 font-normal">✓ key saved</span>
+                    )}
+                    {settingsKeySet && settingsKeySource === "legacy" && (
+                      <span className="ml-2 text-xs text-yellow-500 font-normal">✓ using key from SOQL Explorer config</span>
+                    )}
+                  </span>
+                  <input
+                    type="password"
+                    placeholder={
+                      activeProvider?.needs_key === false ? "Not needed for a local server"
+                      : settingsKeySet ? "••••••••••••••••••••••••"
+                      : activeProvider?.key_hint || "oc_sk_… (OpenCode) or sk-… (OpenAI)"
+                    }
+                    value={settingsDraft.api_key}
+                    onChange={(e) => setSettingsDraft((d) => ({ ...d, api_key: e.target.value }))}
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
+                    autoComplete="off"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">
+                    Gateway URL
+                    <span className="ml-1 text-xs text-gray-400 font-normal">(filled in by Provider; edit for a custom gateway)</span>
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="https://…"
+                    value={settingsDraft.base_url}
+                    onChange={(e) => setSettingsDraft((d) => ({ ...d, base_url: e.target.value }))}
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                    Model
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); refreshModels(); }}
+                      disabled={modelsLoading}
+                      className="text-xs font-normal text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                    >
+                      {modelsLoading ? "Fetching…" : "↻ Refresh list"}
+                    </button>
+                  </span>
+                  <select
+                    value={settingsDraft.model}
+                    onChange={(e) => setSettingsDraft((d) => ({ ...d, model: e.target.value }))}
+                    className="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">Default (from opencode.config.json or gpt-4o)</option>
+                    {settingsDraft.model && !availModels.some((m) => m.id === settingsDraft.model) && (
+                      <option value={settingsDraft.model}>{settingsDraft.model} (current)</option>
+                    )}
+                    {availModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                  </select>
+                  {modelsNote && <span className="text-xs text-gray-400">{modelsNote}</span>}
+                </label>
+              </div>
+            )}
+
+            {/* Tab: Skills */}
+            {skillsOpen && (
+              <div className="flex flex-col text-sm px-6 py-5 flex-1 min-h-0 overflow-hidden">
+                {/* Fixed controls */}
+                <div className="flex flex-col gap-3 shrink-0">
                   <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                    When enabled, Avio automatically injects official Salesforce guidance (from{" "}
+                    Avio automatically injects official Salesforce guidance (from{" "}
                     <span className="font-mono text-gray-600 dark:text-gray-300">forcedotcom/sf-skills</span>)
-                    into AI chat responses when it detects SOQL or Apex questions.
+                    into AI chat when it detects SOQL or Apex questions.
                   </p>
 
-                  {/* Enable / disable toggle */}
-                  <label className="flex items-center gap-3 cursor-pointer">
+                  {/* Toggle */}
+                  <div className="flex items-center gap-3">
                     <div
                       onClick={() => setSettingsDraft(d => ({ ...d, skills_enabled: !d.skills_enabled }))}
-                      className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${
+                      className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer shrink-0 ${
                         settingsDraft.skills_enabled ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
                       }`}
                     >
@@ -871,12 +877,12 @@ export default function App() {
                         settingsDraft.skills_enabled ? "translate-x-5" : "translate-x-0.5"
                       }`} />
                     </div>
-                    <span className="text-gray-700 dark:text-gray-300 font-medium">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">
                       {settingsDraft.skills_enabled ? "Enabled" : "Disabled"}
                     </span>
-                  </label>
+                  </div>
 
-                  {/* Source picker */}
+                  {/* Source */}
                   <label className="flex flex-col gap-1">
                     <span className="font-medium text-gray-700 dark:text-gray-300">Source</span>
                     <select
@@ -891,7 +897,6 @@ export default function App() {
                     </select>
                   </label>
 
-                  {/* Path input (shown for "path" source) */}
                   {settingsDraft.skills_source === "path" && (
                     <label className="flex flex-col gap-1">
                       <span className="font-medium text-gray-700 dark:text-gray-300">
@@ -900,7 +905,7 @@ export default function App() {
                       </span>
                       <input
                         type="text"
-                        placeholder="/mnt/internal/sf-skills  or  ~/sf-skills"
+                        placeholder="/mnt/internal/sf-skills"
                         value={settingsDraft.skills_path}
                         onChange={e => setSettingsDraft(d => ({ ...d, skills_path: e.target.value }))}
                         disabled={!settingsDraft.skills_enabled}
@@ -909,7 +914,6 @@ export default function App() {
                     </label>
                   )}
 
-                  {/* URL input (shown for "url" source) */}
                   {settingsDraft.skills_source === "url" && (
                     <label className="flex flex-col gap-1">
                       <span className="font-medium text-gray-700 dark:text-gray-300">
@@ -927,7 +931,7 @@ export default function App() {
                     </label>
                   )}
 
-                  {/* Test connection */}
+                  {/* Test button */}
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -944,67 +948,84 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Skills list — shown after a successful test */}
-                  {skillsTest && skillsTest !== "testing" && skillsTest.skills && skillsTest.skills.length > 0 && (
-                    <div className="flex flex-col gap-2 pt-1">
-                      {skillsTest.version?.commit && (
-                        <p className="text-xs text-gray-400 dark:text-gray-500">
-                          forcedotcom/sf-skills{" "}
-                          <span className="font-mono">{skillsTest.version.commit}</span>
-                          {skillsTest.version.date && ` · ${skillsTest.version.date}`}
-                        </p>
-                      )}
-                      {/* Scrollable skill cards — shows ~3 cards, scroll for the rest */}
-                      <div className="flex flex-col gap-2 overflow-y-auto" style={{maxHeight: "calc(100vh - 460px)", minHeight: "6rem"}}>
-                        {skillsTest.skills.map(s => (
-                          <div key={s.name} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs ${
-                            s.available
-                              ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
-                              : s.bundled === false
-                                ? "bg-white dark:bg-gray-900 border-dashed border-gray-200 dark:border-gray-700 opacity-50"
-                                : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60"
-                          }`}>
-                            <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
-                              s.available ? "bg-green-500" : s.bundled === false ? "bg-gray-300" : "bg-gray-400"
-                            }`} />
-                            <div className="flex flex-col gap-0.5 min-w-0">
-                              <span className="font-semibold text-gray-800 dark:text-gray-200">{s.label}</span>
-                              <span className="text-gray-500 dark:text-gray-400 leading-snug">{s.description}</span>
-                            </div>
-                            <span className="ml-auto shrink-0 font-mono text-gray-400 dark:text-gray-500">
-                              {s.available
-                                ? `${s.file_count} file${s.file_count !== 1 ? "s" : ""}`
-                                : s.bundled === false
-                                  ? <span className="italic text-gray-300 dark:text-gray-600 font-sans">coming soon</span>
-                                  : <span className="italic">not found</span>
-                              }
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  {/* Version line */}
+                  {skillsTest && skillsTest !== "testing" && skillsTest.version?.commit && (
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      forcedotcom/sf-skills <span className="font-mono">{skillsTest.version.commit}</span>
+                      {skillsTest.version.date && ` · ${skillsTest.version.date}`}
+                    </p>
                   )}
                 </div>
-              )}
-            </div>
 
-            {/* Sticky footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700 shrink-0">
+                {/* MVP-1: Add custom skill */}
+                <div className="shrink-0 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Custom skills</span>
+                  <button
+                    type="button"
+                    disabled
+                    title="Coming in MVP-1 — add a custom skill directory"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-xs text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-60"
+                  >
+                    <span className="text-base leading-none">+</span> Add Skill
+                    <span className="ml-1 text-gray-300 dark:text-gray-600 italic">MVP-1</span>
+                  </button>
+                </div>
+
+                {/* Scrollable skills list */}
+                {skillsTest && skillsTest !== "testing" && skillsTest.skills?.length > 0 && (
+                  <div className="flex flex-col gap-2 mt-3 overflow-y-auto flex-1 min-h-0 pr-1">
+                    {skillsTest.skills.map(s => (
+                      <div key={s.name} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs shrink-0 ${
+                        s.available
+                          ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                          : s.bundled === false
+                            ? "border-dashed border-gray-200 dark:border-gray-700 opacity-50"
+                            : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60"
+                      }`}>
+                        <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
+                          s.available ? "bg-green-500" : s.bundled === false ? "bg-gray-300" : "bg-gray-400"
+                        }`} />
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="font-semibold text-gray-800 dark:text-gray-200">{s.label}</span>
+                          <span className="text-gray-500 dark:text-gray-400 leading-snug">{s.description}</span>
+                        </div>
+                        <span className="ml-auto shrink-0 text-gray-400 dark:text-gray-500 font-mono">
+                          {s.available
+                            ? `${s.file_count} file${s.file_count !== 1 ? "s" : ""}`
+                            : s.bundled === false
+                              ? <span className="italic font-sans text-gray-300 dark:text-gray-600">coming soon</span>
+                              : <span className="italic">not found</span>
+                          }
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Pinned footer */}
+            <div className="shrink-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700">
               {settingsSaved === "saved" && (
                 <span className="text-green-500 text-sm font-medium mr-auto">✓ Saved!</span>
               )}
               {settingsSaved.startsWith("error:") && (
                 <span className="text-red-500 text-xs mr-auto">{settingsSaved.slice(6)}</span>
               )}
+              {!skillsOpen && (
+                <span className="text-xs text-gray-400 mr-auto italic">Switch to Skills tab to save changes</span>
+              )}
               <button
                 onClick={() => setSettingsOpen(false)}
-                className="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                disabled={!skillsOpen}
+                className="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
                 Cancel
               </button>
               <button
                 onClick={saveSettings}
-                className="px-5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors"
+                disabled={!skillsOpen}
+                className="px-5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
               >
                 Save
               </button>
