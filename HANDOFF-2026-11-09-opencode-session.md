@@ -1,4 +1,6 @@
-# Vendavis — Session Handoff (current)
+# Vendavis — Session Handoff (superseded)
+
+> **Superseded by [`HANDOFF-2026-11-11.md`](HANDOFF-2026-11-11.md).** Kept for history.
 
 **Date:** 2026-11-09 (evening)
 **Machine:** Windows 11, project at `C:\Users\juan\dev\app\vendavis`

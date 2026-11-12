@@ -29,8 +29,9 @@
 
 - [ ] **Push v1.0.1 Beta to GitHub**
   ```bash
-  git push origin claude/mvp-0 opencode/mvp-0
+  git push origin opencode/mvp-0
   ```
+  (`claude/mvp-0` is archived; `opencode/mvp-0` is the single dev branch. See README "Branching and releases".)
 
 ## MVP-1 features (post-Beta)
 
@@ -46,4 +47,4 @@
 ## Notes
 
 - Signing is **not blocking** for internal/beta distribution — testers can right-click → Open on macOS or click "More info → Run anyway" on Windows
-- Both branches (`claude/mvp-0` and `opencode/mvp-0`) need the same signing config when the time comes
+- Signing config goes on `opencode/mvp-0` (the single dev branch); `claude/mvp-0` is archived

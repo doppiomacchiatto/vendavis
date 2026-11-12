@@ -88,6 +88,24 @@ The `sf_cli_candidates()` list also includes `.cmd` wrapper variants, which Wind
 
 ---
 
+## Branching and releases
+
+| Branch | Role |
+|---|---|
+| `main` | Stable releases. Only receives merges from the dev branch when it is release-ready; releases are tagged `vX.Y.Z`. |
+| `opencode/mvp-0` | **Dev branch (single line of development, Windows + macOS + Linux).** Everything lands here. |
+| `claude/mvp-0` | **Archived**, kept for history only. Do not commit to it. Everything it had is in `opencode/mvp-0`. |
+
+Feature-based flow:
+
+1. Branch from the dev branch: `git switch -c feat/<short-name> opencode/mvp-0`.
+2. Keep commits scoped to one area (backend / Tauri / one frontend page) so they can be reviewed and reverted on their own.
+3. Before merging back: `cd frontend && npm run build`, and `cd backend && python -c "import main"` (from the venv).
+4. Merge into `opencode/mvp-0`, push, delete the feature branch.
+5. When the dev branch is release-ready, merge it into `main` and tag the release.
+
+The AI layer stays provider-neutral (`backend/ai_client.py`, configured in Settings). There is no separate per-vendor branch; use the Anthropic preset in Settings for Claude models.
+
 ## Dev setup (first time)
 
 ```bash
