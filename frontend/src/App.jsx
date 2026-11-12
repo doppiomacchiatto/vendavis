@@ -111,7 +111,7 @@ export default function App() {
 
   const [settingsOpen,  setSettingsOpen]  = useState(false);
   const [settingsDraft, setSettingsDraft] = useState({ api_key: "", model: "", base_url: "", skills_enabled: true, skills_source: "bundled", skills_path: "", skills_url: "" });
-  const [skillsTest,    setSkillsTest]    = useState(null);   // null | "testing" | { ok, msg }
+  const [skillsTest,    setSkillsTest]    = useState(null);   // null | "testing" | { ok, msg, skills, version }
   const [skillsOpen,    setSkillsOpen]    = useState(false);  // skills section expanded
   const [availModels,   setAvailModels]   = useState([]);
   const [providers,     setProviders]     = useState([]);
@@ -202,12 +202,12 @@ export default function App() {
       const d = await api("/api/ai/skills");
       const active = (d.skills || []).filter(s => s.available);
       if (active.length === 0) {
-        setSkillsTest({ ok: false, msg: "No skill files found at the configured location." });
+        setSkillsTest({ ok: false, msg: "No skill files found at the configured location.", skills: d.skills || [], version: d.version || {} });
       } else {
-        setSkillsTest({ ok: true, msg: `${active.length} skill${active.length > 1 ? "s" : ""} found: ${active.map(s => s.label).join(", ")}` });
+        setSkillsTest({ ok: true, msg: `${active.length} of ${d.skills.length} skill${d.skills.length > 1 ? "s" : ""} available`, skills: d.skills || [], version: d.version || {} });
       }
     } catch (e) {
-      setSkillsTest({ ok: false, msg: e.message });
+      setSkillsTest({ ok: false, msg: e.message, skills: [], version: {} });
     }
   }
 
@@ -934,6 +934,40 @@ export default function App() {
                       </span>
                     )}
                   </div>
+
+                  {/* Skills list — shown after a successful test */}
+                  {skillsTest && skillsTest !== "testing" && skillsTest.skills && skillsTest.skills.length > 0 && (
+                    <div className="flex flex-col gap-2 pt-1">
+                      {skillsTest.version?.commit && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                          forcedotcom/sf-skills{" "}
+                          <span className="font-mono">{skillsTest.version.commit}</span>
+                          {skillsTest.version.date && ` · ${skillsTest.version.date}`}
+                        </p>
+                      )}
+                      {skillsTest.skills.map(s => (
+                        <div key={s.name} className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border text-xs ${
+                          s.available
+                            ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                            : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-60"
+                        }`}>
+                          <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${s.available ? "bg-green-500" : "bg-gray-400"}`} />
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <span className="font-semibold text-gray-800 dark:text-gray-200">{s.label}</span>
+                            <span className="text-gray-500 dark:text-gray-400 leading-snug">{s.description}</span>
+                          </div>
+                          {s.available && (
+                            <span className="ml-auto shrink-0 text-gray-400 dark:text-gray-500 font-mono">
+                              {s.file_count} file{s.file_count !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                          {!s.available && (
+                            <span className="ml-auto shrink-0 text-gray-400 italic">not found</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
