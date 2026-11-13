@@ -12,9 +12,9 @@ const METHOD_COLORS = {
 };
 
 const STATUS_COLOR = (s) =>
-  s >= 200 && s < 300 ? "text-green-600"
-  : s >= 400           ? "text-red-600"
-  :                      "text-yellow-600";
+  s >= 200 && s < 300 ? "text-green-600 dark:text-green-400"
+  : s >= 400           ? "text-red-600 dark:text-red-400"
+  :                      "text-yellow-600 dark:text-yellow-400";
 
 const STATUS_TEXT = {
   200: "OK", 201: "Created", 204: "No Content",
@@ -79,47 +79,47 @@ function HelpModal({ onClose, onLoad }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 overflow-hidden">
 
         {/* Header */}
-        <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-100">
+        <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-gray-800">
           <div>
-            <p className="text-sm font-bold text-slate-900">REST Explorer — How to Use</p>
+            <p className="text-sm font-bold text-slate-900 dark:text-slate-100">REST Explorer — How to Use</p>
             <p className="text-xs text-slate-400 mt-0.5">Click any sample to load it into the editor</p>
           </div>
           <button onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 text-lg leading-none transition-colors">✕</button>
+            className="text-slate-400 hover:text-slate-700 text-lg dark:hover:text-slate-200 leading-none transition-colors">✕</button>
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5">
 
           {/* How to use */}
-          <section className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-slate-700 leading-relaxed space-y-1.5">
-            <p><strong className="text-slate-800">1. Select a method</strong> — GET for reads, POST/PUT/PATCH to create or update, DELETE to remove.</p>
-            <p><strong className="text-slate-800">2. Enter a path</strong> — always relative, e.g. <code className="bg-blue-100 px-1 rounded font-mono">/services/data/v68.0/sobjects</code>. The org base URL is added automatically.</p>
-            <p><strong className="text-slate-800">3. For POST/PUT/PATCH</strong> — a JSON body editor appears below the path. Paste or type your request body there.</p>
-            <p><strong className="text-slate-800">4. Use Up</strong> — navigates to the parent path segment, handy for exploring nested resources.</p>
-            <p><strong className="text-slate-800">5. Click links</strong> in the response tree to navigate directly to that resource.</p>
-            <p><strong className="text-slate-800">6. Raw mode</strong> — shows the response as plain JSON text instead of the interactive tree.</p>
+          <section className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-slate-700 dark:bg-blue-950/40 dark:border-blue-900 dark:text-slate-300 leading-relaxed space-y-1.5">
+            <p><strong className="text-slate-800 dark:text-slate-100">1. Select a method</strong> — GET for reads, POST/PUT/PATCH to create or update, DELETE to remove.</p>
+            <p><strong className="text-slate-800 dark:text-slate-100">2. Enter a path</strong> — always relative, e.g. <code className="bg-blue-100 dark:bg-blue-900/50 px-1 rounded font-mono">/services/data/v68.0/sobjects</code>. The org base URL is added automatically.</p>
+            <p><strong className="text-slate-800 dark:text-slate-100">3. For POST/PUT/PATCH</strong> — a JSON body editor appears below the path. Paste or type your request body there.</p>
+            <p><strong className="text-slate-800 dark:text-slate-100">4. Use Up</strong> — navigates to the parent path segment, handy for exploring nested resources.</p>
+            <p><strong className="text-slate-800 dark:text-slate-100">5. Click links</strong> in the response tree to navigate directly to that resource.</p>
+            <p><strong className="text-slate-800 dark:text-slate-100">6. Raw mode</strong> — shows the response as plain JSON text instead of the interactive tree.</p>
           </section>
 
           {/* Samples */}
           {SAMPLES.map(group => (
             <section key={group.group}>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{group.group}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase dark:text-slate-400 tracking-wider mb-2">{group.group}</p>
               <div className="flex flex-col gap-1">
                 {group.items.map(item => (
                   <button
                     key={item.path}
                     onClick={() => { onLoad(item); onClose(); }}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 text-left transition-colors group"
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-100 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:hover:border-gray-600 text-left transition-colors group"
                   >
                     <span className={`shrink-0 font-bold text-xs px-1.5 py-0.5 rounded ${METHOD_COLORS[item.method]}`}>
                       {item.method}
                     </span>
                     <span className="flex-1 min-w-0">
-                      <span className="text-xs font-medium text-slate-700 group-hover:text-slate-900">{item.label}</span>
+                      <span className="text-xs font-medium text-slate-700 group-hover:text-slate-900 dark:text-slate-200 dark:group-hover:text-white">{item.label}</span>
                       <span className="block text-xs font-mono text-slate-400 truncate mt-0.5">{item.path}</span>
                     </span>
                     <span className="text-slate-300 group-hover:text-blue-400 text-sm">→</span>
@@ -131,9 +131,9 @@ function HelpModal({ onClose, onLoad }) {
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 px-5 py-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+        <div className="shrink-0 px-5 py-3 border-t border-slate-100 bg-slate-50 dark:border-gray-800 dark:bg-gray-800/60 flex justify-end">
           <button onClick={onClose}
-            className="px-4 py-1.5 text-sm rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors">
+            className="px-4 py-1.5 text-sm rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-slate-100 transition-colors">
             Close
           </button>
         </div>
@@ -148,15 +148,15 @@ function JsonNode({ data, depth = 0 }) {
   const indent = depth * 16;
 
   if (data === null)    return <span className="text-slate-400 italic">null</span>;
-  if (data === true)    return <span className="text-emerald-600">true</span>;
-  if (data === false)   return <span className="text-red-500">false</span>;
-  if (typeof data === "number") return <span className="text-orange-600">{data}</span>;
+  if (data === true)    return <span className="text-emerald-600 dark:text-emerald-400">true</span>;
+  if (data === false)   return <span className="text-red-500 dark:text-red-400">false</span>;
+  if (typeof data === "number") return <span className="text-orange-600 dark:text-orange-400">{data}</span>;
   if (typeof data === "string") {
     // Linkify SF REST paths
     if (data.startsWith("/services/")) {
-      return <span className="text-blue-600 underline cursor-pointer" data-path={data}>{`"${data}"`}</span>;
+      return <span className="text-blue-600 underline cursor-pointer dark:text-blue-400" data-path={data}>{`"${data}"`}</span>;
     }
-    return <span className="text-emerald-700">{`"${data}"`}</span>;
+    return <span className="text-emerald-700 dark:text-emerald-300">{`"${data}"`}</span>;
   }
 
   const isArray  = Array.isArray(data);
@@ -171,15 +171,15 @@ function JsonNode({ data, depth = 0 }) {
     <span>
       <button
         onClick={() => setCollapsed(c => !c)}
-        className="text-slate-400 hover:text-slate-700 mr-1 font-mono"
+        className="text-slate-400 hover:text-slate-700 mr-1 font-mono dark:hover:text-slate-200"
       >
         {collapsed ? "▶" : "▼"}
       </button>
-      <span className="text-slate-500">{open}</span>
+      <span className="text-slate-500 dark:text-slate-400">{open}</span>
       {collapsed ? (
         <button
           onClick={() => setCollapsed(false)}
-          className="text-slate-400 hover:text-slate-600 text-xs mx-1 italic"
+          className="text-slate-400 hover:text-slate-600 text-xs mx-1 italic dark:hover:text-slate-200"
         >
           {count} {isArray ? "items" : "keys"}
         </button>
@@ -196,7 +196,7 @@ function JsonNode({ data, depth = 0 }) {
           ))}
         </div>
       )}
-      {!collapsed && <span className="text-slate-500" style={{ marginLeft: indent }}>{close}</span>}
+      {!collapsed && <span className="text-slate-500 dark:text-slate-400" style={{ marginLeft: indent }}>{close}</span>}
     </span>
   );
 }
@@ -275,10 +275,10 @@ export default function RestExplorer({ org }) {
       {helpOpen && (
         <HelpModal onClose={() => setHelpOpen(false)} onLoad={loadSample} />
       )}
-    <div className="flex flex-col h-full overflow-hidden bg-white text-gray-900">
+    <div className="flex flex-col h-full overflow-hidden bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100">
 
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      <div className="shrink-0 border-b border-slate-200 px-4 py-3 flex flex-col gap-2">
+      <div className="shrink-0 border-b border-slate-200 px-4 py-3 flex flex-col gap-2 dark:border-gray-700">
 
         {/* Method + URL row */}
         <div className="flex gap-2 items-center">
@@ -306,7 +306,7 @@ export default function RestExplorer({ org }) {
             onChange={e => setPath(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") execute(); }}
             spellCheck={false}
-            className="flex-1 font-mono text-sm px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 font-mono text-sm px-3 py-1.5 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="/services/data/v68.0/"
           />
 
@@ -353,7 +353,7 @@ export default function RestExplorer({ org }) {
           <button
             onClick={() => setHelpOpen(true)}
             title="How to use & sample requests"
-            className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors shrink-0"
+            className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors shrink-0 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100"
           >
             ?
           </button>
@@ -376,7 +376,7 @@ export default function RestExplorer({ org }) {
             rows={4}
             spellCheck={false}
             placeholder='{ "Name": "Test Account" }'
-            className="font-mono text-xs px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+            className="font-mono text-xs px-3 py-2 rounded-lg text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
           />
         )}
 
@@ -403,7 +403,7 @@ export default function RestExplorer({ org }) {
         {response && (
           <>
             {/* Response status bar */}
-            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-white">
+            <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-white dark:border-gray-700 dark:bg-gray-900">
               <div className="flex items-center gap-3">
                 <span className={`font-bold text-sm ${STATUS_COLOR(response.status)}`}>
                   {response.status
@@ -422,7 +422,7 @@ export default function RestExplorer({ org }) {
                       : JSON.stringify(response.body, null, 2);
                     navigator.clipboard?.writeText(text);
                   }}
-                  className="text-xs px-2.5 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+                  className="text-xs px-2.5 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
                   Copy
                 </button>
@@ -430,8 +430,8 @@ export default function RestExplorer({ org }) {
                   onClick={() => setRawMode(r => !r)}
                   className={`text-xs px-2.5 py-1 rounded border transition-colors ${
                     rawMode
-                      ? "bg-blue-100 text-blue-700 border-blue-200"
-                      : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                      ? "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-800"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
                   }`}
                 >
                   Raw
@@ -441,7 +441,7 @@ export default function RestExplorer({ org }) {
 
             {/* Response body */}
             <div
-              className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50 text-slate-800"
+              className="flex-1 overflow-auto p-4 font-mono text-xs bg-slate-50 text-slate-800 dark:bg-gray-950 dark:text-gray-100"
               onClick={handleResponseClick}
             >
               {rawMode || typeof response.body === "string" ? (
