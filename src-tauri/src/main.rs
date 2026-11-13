@@ -93,6 +93,12 @@ fn write_file(path: String, content: String) -> Result<(), String> {
         .map_err(|e| format!("Could not write '{}': {}", path, e))
 }
 
+/// True if a file or folder exists at the given path (used to confirm overwrites).
+#[tauri::command]
+fn path_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
 /// Open a file with the OS default application
 #[tauri::command]
 fn open_file(path: String) -> Result<(), String> {
@@ -333,6 +339,7 @@ fn main() {
             api_post,
             open_file,
             write_file,
+            path_exists,
             confirm_close,
             restart_backend
         ]);
