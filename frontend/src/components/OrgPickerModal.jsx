@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, waitForBackend } from "../api/client";
 import Spinner from "./Spinner";
 import { debugLog, useDebugLog } from "../debugLog";
 import DebugLogModal from "./DebugLogModal";
@@ -27,22 +27,16 @@ export default function OrgPickerModal({ onSelect }) {
       // until it answers, and only show a soft "taking longer" hint after 60s.
       addLog("Starting data services…", "start");
       setStartupStatus("starting");
-      const DELAY_MS = 500;
-      const SLOW_AFTER = 120; // attempts (~60s)
-      for (let i = 0; !cancelled; i++) {
-        try {
-          await api("/api/health");
-          break;
-        } catch {
-          if (i === 0) addLog("Waiting for data services to start…", "info");
-          if (i === SLOW_AFTER) {
-            addLog("Data services are taking longer than usual to start…", "warn");
-            setSlowStart(true);
-          }
-          await new Promise(r => setTimeout(r, DELAY_MS));
-        }
-      }
-      if (cancelled) return;
+      // waitForBackend polls quietly (no per-retry error entries in the debug log).
+      const up = await waitForBackend({
+        shouldStop: () => cancelled,
+        onWaiting: () => addLog("Waiting for data services to start…", "info"),
+        onSlow: () => {
+          addLog("Data services are taking longer than usual to start…", "warn");
+          setSlowStart(true);
+        },
+      });
+      if (!up || cancelled) return;
       setSlowStart(false);
       addLog("✅ Data services ready", "done");
       setStartupStatus("ready");

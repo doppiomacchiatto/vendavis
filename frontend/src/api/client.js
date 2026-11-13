@@ -38,8 +38,10 @@ export async function api(path, opts = {}) {
  * onWaiting() fires once if the first ping fails. shouldStop() aborts the wait
  * (returns false in that case). Health pings are not written to the debug log.
  */
-export async function waitForBackend({ onWaiting, shouldStop, intervalMs = 500 } = {}) {
+export async function waitForBackend({ onWaiting, onSlow, slowAfterMs = 60000, shouldStop, intervalMs = 500 } = {}) {
+  const t0 = Date.now();
   let notified = false;
+  let slowNotified = false;
   for (;;) {
     if (shouldStop?.()) return false;
     try {
@@ -47,6 +49,7 @@ export async function waitForBackend({ onWaiting, shouldStop, intervalMs = 500 }
       return true;
     } catch {
       if (!notified) { notified = true; onWaiting?.(); }
+      if (!slowNotified && Date.now() - t0 >= slowAfterMs) { slowNotified = true; onSlow?.(); }
       await new Promise(r => setTimeout(r, intervalMs));
     }
   }
