@@ -38,7 +38,8 @@ from platform_env import avio_data_dir as _avio_data_dir
 CONFIG_PATH  = _avio_data_dir() / "config.json"
 USER_SKILLS  = _avio_data_dir() / "skills"   # downloaded/imported skills live here
 
-GH_RAW_BASE  = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main"
+# Skills live under skills/<slug>/ in the forcedotcom/sf-skills repo
+GH_RAW_BASE  = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main/skills"
 
 # ---------------------------------------------------------------------------
 # Skill file manifest  (relative paths within any skills root directory)
@@ -192,7 +193,7 @@ def _load_file_url(base_url: str, rel_path: str) -> Optional[str]:
 # Custom skill helpers
 # ---------------------------------------------------------------------------
 
-_GH_RAW_BASE = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main"
+_GH_RAW_BASE = GH_RAW_BASE
 
 def _load_custom_skill_context(entry: dict) -> Optional[str]:
     """
@@ -269,6 +270,35 @@ def _load_custom_skill_context(entry: dict) -> Optional[str]:
 
 
 def fetch_skill(name: str, source: str) -> dict:
+    """Download/copy a skill (see _fetch_skill_impl). A failed fetch leaves nothing behind:
+    the skill folder is removed again unless it already existed before this call."""
+    import shutil
+    dest = USER_SKILLS / name.strip().replace(" ", "-").lower()
+    existed = dest.exists()
+    result = _fetch_skill_impl(name, source)
+    if not result["ok"] and not existed:
+        shutil.rmtree(dest, ignore_errors=True)
+    return result
+
+
+def remove_skill(name: str) -> bool:
+    """Delete a downloaded skill folder from the user skills directory.
+
+    Raises ValueError for names that would resolve outside that directory.
+    Returns True if a folder was removed, False if there was nothing to remove.
+    """
+    import shutil
+    slug = name.strip().replace(" ", "-").lower()
+    skill_dir = (USER_SKILLS / slug).resolve()
+    if not slug or skill_dir.parent != USER_SKILLS.resolve():
+        raise ValueError(f"Invalid skill name: {name!r}")
+    if not skill_dir.is_dir():
+        return False
+    shutil.rmtree(skill_dir)
+    return True
+
+
+def _fetch_skill_impl(name: str, source: str) -> dict:
     """
     Download or copy a skill into ~/.avio_skills/<name>/ and return a status dict.
 
@@ -294,7 +324,7 @@ def fetch_skill(name: str, source: str) -> dict:
             skill_slug = source[len("bundled:"):]
             src_dir = SKILLS_DIR / skill_slug
             if not src_dir.is_dir():
-                return {"ok": False, "path": str(dest), "files": 0, "error": f"Bundled skill '{skill_slug}' not found"}
+                return {"ok": False, "path": str(dest), "files": 0, "error": f"'{skill_slug}' is not bundled with this version of Avio yet"}
             for md in src_dir.rglob("*.md"):
                 rel = md.relative_to(src_dir)
                 out = dest / rel
@@ -586,6 +616,8 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
                     pass
             skill_md   = skill_dir / "SKILL.md"
             file_count = sum(1 for f in skill_dir.rglob("*.md") if not f.name.startswith("."))
+            if file_count == 0:
+                continue   # empty leftover from a failed download: don't list it
             available  = skill_md.exists() and file_count > 0
             display    = meta.get("name") or skill_dir.name
             source_url = meta.get("source", "")
@@ -613,36 +645,37 @@ def get_skills_manifest(config_override: Optional[dict] = None) -> dict:
 _SKILL_LABELS = {
     "platform-soql-query":            "SOQL Query",
     "platform-apex-generate":         "Apex Generate",
-    "platform-apex-refactor":         "Apex Refactor",
-    "platform-apex-unittest":         "Apex Unit Test",
-    "platform-flows-generate":        "Flows Generate",
-    "platform-lwc-generate":          "LWC Generate",
+    "platform-apex-logs-debug":       "Apex Debug Logs",
+    "platform-apex-test-generate":    "Apex Test Generate",
+    "automation-flow-generate":       "Flow Generate",
+    "experience-lwc-generate":        "LWC Generate",
     "platform-metadata-retrieve":     "Metadata Retrieve",
     "platform-metadata-deploy":       "Metadata Deploy",
-    "platform-permissions-analyze":   "Permissions Analyze",
+    "platform-permission-set-generate": "Permission Set Generate",
 }
 
 _SKILL_DESCS = {
     "platform-soql-query":            "SOQL authoring, optimization, anti-patterns, and reference",
     "platform-apex-generate":         "Apex class and trigger generation, best practices",
-    "platform-apex-refactor":         "Apex code refactoring and modernization",
-    "platform-apex-unittest":         "Apex unit test authoring and coverage guidance",
-    "platform-flows-generate":        "Salesforce Flow and Process Builder authoring",
-    "platform-lwc-generate":          "Lightning Web Component generation and patterns",
-    "platform-metadata-retrieve":     "Metadata API retrieve operations and packaging",
-    "platform-metadata-deploy":       "Metadata API deploy, validation, and rollback",
-    "platform-permissions-analyze":   "Permission set and profile security analysis",
+    "platform-apex-logs-debug":       "Debug log analysis, governor limits, and stack-trace troubleshooting",
+    "platform-apex-test-generate":    "Apex test classes: TestDataFactory, bulk (251+ records), mocking, assertions",
+    "automation-flow-generate":       "Flow generation: Screen, Autolaunched, Record-Triggered, and Scheduled flows",
+    "experience-lwc-generate":        "Lightning Web Components (PICKLES), wire patterns, and Jest tests",
+    "platform-metadata-retrieve":     "Retrieve metadata with sf project retrieve start (by type, manifest, or package)",
+    "platform-metadata-deploy":       "Deploy, validate, and quick-deploy metadata with sf CLI v2",
+    "platform-permission-set-generate": "Permission set metadata (PermissionSet XML): object, field, user, and app permissions",
 }
 
-# Skills in the upstream repo not yet bundled — shown in the UI as coming soon
+# Skills in the upstream repo (forcedotcom/sf-skills, skills/<slug>/) not yet bundled,
+# shown in the UI as coming soon. Every slug here must exist upstream.
 _UPSTREAM_CATALOG = [
-    "platform-soql-query",           # bundled
-    "platform-apex-generate",        # bundled
-    "platform-apex-refactor",
-    "platform-apex-unittest",
-    "platform-flows-generate",
-    "platform-lwc-generate",
+    "platform-soql-query",             # bundled
+    "platform-apex-generate",          # bundled
+    "platform-apex-logs-debug",
+    "platform-apex-test-generate",
+    "automation-flow-generate",
+    "experience-lwc-generate",
     "platform-metadata-retrieve",
     "platform-metadata-deploy",
-    "platform-permissions-analyze",
+    "platform-permission-set-generate",
 ]

@@ -237,15 +237,17 @@ def fetch_ai_skill(req: SkillFetchRequest):
 class SkillDeleteRequest(BaseModel):
     name: str   # directory name under ~/.avio_skills/
 
+@app.post("/api/ai/skills/remove")   # POST alias: the desktop client only sends GET/POST
 @app.delete("/api/ai/skills/fetch")
 def delete_ai_skill(req: SkillDeleteRequest):
-    """Remove a downloaded skill from ~/.avio_skills/<name>/."""
-    import shutil
-    from sf_skills import USER_SKILLS
-    skill_dir = USER_SKILLS / req.name.strip().replace(" ", "-").lower()
-    if skill_dir.exists():
-        shutil.rmtree(skill_dir)
-    return {"ok": True}
+    """Remove a downloaded skill from the user skills directory."""
+    from sf_skills import remove_skill
+    try:
+        return {"ok": True, "removed": remove_skill(req.name)}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Could not remove skill: {e}")
 
 
 # ---------------------------------------------------------------------------
