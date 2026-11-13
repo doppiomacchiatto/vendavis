@@ -918,6 +918,28 @@ def sf_rest_request(target_org: str, method: str, path: str, body: str = None) -
 # Security Settings (Metadata API retrieve)
 # ---------------------------------------------------------------------------
 
+def _scratch_dir():
+    """Temp directory that never raises on cleanup (works on Python 3.9+).
+
+    On Windows the CLI can still hold the directory as its cwd when we delete it;
+    the caller has already read what it needs by then, so a failed delete is ignored.
+    (tempfile.TemporaryDirectory(ignore_cleanup_errors=True) would be simpler but
+    needs Python 3.10.)
+    """
+    import contextlib
+    import shutil
+
+    @contextlib.contextmanager
+    def _cm():
+        d = tempfile.mkdtemp()
+        try:
+            yield d
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    return _cm()
+
+
 def get_security_settings(target_org: str) -> dict:
     """Retrieve the org's Security settings and return the values the Health tab uses.
 
@@ -937,9 +959,7 @@ def get_security_settings(target_org: str) -> dict:
     """
     import xml.etree.ElementTree as ET
 
-    # ignore_cleanup_errors: on Windows the CLI can still hold the directory as its
-    # cwd when we delete it; the result is already parsed by then.
-    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
+    with _scratch_dir() as tmpdir:
         tmp = Path(tmpdir)
 
         # Minimal sfdx-project.json. The retrieve target must NOT overlap a package
