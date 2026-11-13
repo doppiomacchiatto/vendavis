@@ -10,7 +10,7 @@ import OrgHealth from "./pages/OrgHealth";
 import RestExplorer from "./pages/RestExplorer";
 import DebugLogModal from "./components/DebugLogModal";
 import WelcomeModal, { shouldShowWelcome } from "./components/WelcomeModal";
-import { api } from "./api/client";
+import { api, waitForBackend } from "./api/client";
 import { debugLog, useDebugLog } from "./debugLog";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -105,12 +105,18 @@ export default function App() {
     }
   }, []);
 
-  // Load saved theme from backend on startup
+  // Load saved theme from backend on startup. The backend is usually still starting
+  // at this point, so wait for it first (otherwise the call fails and the saved
+  // theme is never applied).
   useEffect(() => {
-    api("/api/settings").then((d) => {
-      const saved = d.theme || "system";
-      setTheme(saved);
-    }).catch(() => {});
+    let cancelled = false;
+    waitForBackend({ shouldStop: () => cancelled })
+      .then((up) => (up ? api("/api/settings") : null))
+      .then((d) => {
+        if (d && !cancelled) setTheme(d.theme || "system");
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   // ── Settings modal ─────────────────────────────────────────────────────────
@@ -923,8 +929,8 @@ export default function App() {
 
             {/* Tab: Skills */}
             {settingsTab === "skills" && (
-              <div className="flex flex-col text-sm px-6 py-5 flex-1 min-h-0 overflow-hidden">
-                {/* Fixed controls */}
+              <div className="flex flex-col text-sm px-6 py-5 flex-1 min-h-0 overflow-y-auto">
+                {/* Controls (scroll with the tab when the window is short) */}
                 <div className="flex flex-col gap-3 shrink-0">
                   <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                     Avio automatically injects official Salesforce guidance (from{" "}
@@ -1053,29 +1059,52 @@ export default function App() {
 
                   {/* Add skill inline form */}
                   {addSkillOpen && (() => {
-                    const GH_BASE = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main";
+                    const GH_BASE = "https://raw.githubusercontent.com/forcedotcom/sf-skills/main/skills";
                     const BUNDLED_BASE = "sf_skills";  // display label only — backend resolves real path
                     const knownSlugs = [
-                      "platform-soql-query","platform-apex-generate","platform-apex-refactor",
-                      "platform-apex-unittest","platform-flows-generate","platform-lwc-generate",
-                      "platform-metadata-retrieve","platform-metadata-deploy","platform-permissions-analyze"
+                      "platform-soql-query","platform-apex-generate","platform-apex-logs-debug",
+                      "platform-apex-test-generate","automation-flow-generate","experience-lwc-generate",
+                      "platform-metadata-retrieve","platform-metadata-deploy","platform-permission-set-generate"
                     ];
                     const src = settingsDraft.skills_source;
 
+                    // Catalog from the last Refresh; says which skills actually ship with this build
+                    const catalog = (skillsTest && skillsTest !== "testing" ? skillsTest.skills : null) || [];
+
+                    function findMatch(name) {
+                      const typed = name.trim().toLowerCase();
+                      const slug = typed.replace(/\s+/g, "-");
+                      if (!slug) return "";
+                      // Exact label match from the catalog first ("Apex Test Generate" -> platform-apex-test-generate)
+                      const byLabel = catalog.find(s => !s.user && (s.label || "").toLowerCase() === typed);
+                      if (byLabel) return byLabel.name;
+                      return knownSlugs.find(s => s === slug || s.includes(slug)) || "";
+                    }
+
+                    // true when the name matches a catalog skill that is not shipped in this build
+                    const isNotBundled = (match) =>
+                      !!match && catalog.some(s => s.name === match && !s.user && s.bundled === false);
+
                     function autoPath(name) {
-                      const slug = name.trim().toLowerCase().replace(/\s+/g, "-");
-                      const match = knownSlugs.find(s => s === slug || s.includes(slug) || slug.includes(s.replace("platform-","")));
+                      const match = findMatch(name);
                       if (!match) return "";
                       if (src === "github") return `${GH_BASE}/${match}`;
-                      if (src === "bundled") return `bundled:${match}`;  // sentinel — backend maps to SKILLS_DIR/match
+                      if (src === "bundled") {
+                        if (isNotBundled(match)) return "";   // would fail: nothing to copy
+                        return `bundled:${match}`;  // sentinel — backend maps to SKILLS_DIR/match
+                      }
                       return "";  // path/url: user types it
                     }
 
+                    const notBundledSkill = src === "bundled" && isNotBundled(findMatch(addSkillName))
+                      ? catalog.find(s => s.name === findMatch(addSkillName))
+                      : null;
+
                     const pathPlaceholder =
-                      src === "github"  ? `${GH_BASE}/platform-apex-unittest` :
+                      src === "github"  ? `${GH_BASE}/platform-soql-query` :
                       src === "bundled" ? "Auto-filled from bundled skills directory" :
-                      src === "url"     ? "https://skills.internal.corp/sf-skills/platform-apex-unittest" :
-                                         "/mnt/internal/sf-skills/platform-apex-unittest";
+                      src === "url"     ? "https://skills.internal.corp/sf-skills/platform-apex-test-generate" :
+                                         "/mnt/internal/sf-skills/platform-apex-test-generate";
 
                     const pathReadOnly = src === "bundled";
 
@@ -1089,7 +1118,9 @@ export default function App() {
                           const name = e.target.value;
                           setAddSkillName(name);
                           const p = autoPath(name);
-                          if (p) setAddSkillPath(p);
+                          // Bundled mode: the path is read-only, so always follow the name (clears a stale path)
+                          if (p || src === "bundled") setAddSkillPath(p);
+                          setAddSkillError("");
                         }}
                         className="border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
@@ -1131,6 +1162,11 @@ export default function App() {
                           className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-medium transition-colors"
                         >{addSkillFetching ? "Adding…" : "Add"}</button>
                       </div>
+                      {notBundledSkill && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 leading-snug">
+                          "{notBundledSkill.label}" isn't included in this version of Avio yet (listed as coming soon), so it can't be added.
+                        </p>
+                      )}
                       {addSkillError && (
                         <p className="text-xs text-red-500 mt-1">✗ {addSkillError}</p>
                       )}
@@ -1174,12 +1210,15 @@ export default function App() {
                           title="Remove skill"
                           onClick={async () => {
                             try {
-                              await api("/api/ai/skills/fetch", {
-                                method: "DELETE",
+                              // POST alias: the desktop client only sends GET/POST (a DELETE would hit the add endpoint)
+                              await api("/api/ai/skills/remove", {
+                                method: "POST",
                                 body: JSON.stringify({ name: s.name }),
                               });
                               testSkillsConnection();
-                            } catch (e) { /* ignore */ }
+                            } catch (e) {
+                              debugLog(`Remove skill '${s.name}' failed: ${e.message}`, "error");
+                            }
                           }}
                           className="ml-1 text-gray-300 hover:text-red-400 dark:text-gray-600 dark:hover:text-red-400 transition-colors shrink-0"
                         >✕</button>
@@ -1188,7 +1227,7 @@ export default function App() {
                   );
 
                   return (
-                    <div className="flex flex-col gap-3 mt-3 overflow-y-auto flex-1 min-h-0 pr-1">
+                    <div className="flex flex-col gap-3 mt-3 overflow-y-auto flex-1 min-h-[10rem] pr-1">
                       {/* Salesforce Skills section */}
                       <div className="flex flex-col gap-1.5">
                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Salesforce Skills</p>
