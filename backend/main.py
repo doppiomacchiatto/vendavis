@@ -26,7 +26,7 @@ from sf_cli import (list_orgs, list_objects, describe_object, run_apex_anonymous
                     get_fls_for_profile, get_object_perms_for_profile,
                     get_fls_for_permset, get_object_perms_for_permset,
                     get_org_limits, get_validation_rules, toggle_validation_rule,
-                    sf_rest_request, get_security_settings)
+                    sf_rest_request, get_security_settings, get_org_api_version)
 from sf_cli import _sf as _sf_raw   # for raw SOQL
 import vr_snapshot
 from excel_builder import build_excel
@@ -388,6 +388,15 @@ def get_permset_fls(alias: str, permset_name: str, object_api: str):
         return {"obj_perms": obj_perms, "fls": fls}
     except Exception as e:
         raise HTTPException(500, str(e))
+
+@app.get("/api/orgs/{alias}/api-version")
+def org_api_version(alias: str):
+    """API version of the org's CLI session (used for generated -meta.xml files)."""
+    try:
+        return {"apiVersion": get_org_api_version(alias)}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
 
 # ---------------------------------------------------------------------------
 # REST Explorer proxy

@@ -235,6 +235,22 @@ def list_orgs():
     return unique
 
 
+_API_VERSION_CACHE: dict = {}
+
+
+def get_org_api_version(target_org: str) -> str:
+    """API version the CLI session for this org uses (e.g. "68.0"). Cached per alias,
+    since `sf org display` costs several seconds."""
+    if target_org in _API_VERSION_CACHE:
+        return _API_VERSION_CACHE[target_org]
+    info = _sf("org", "display", "--target-org", target_org).get("result", {})
+    ver = info.get("apiVersion") or info.get("api_version")
+    if not ver:
+        raise RuntimeError(f"Could not determine the API version for '{target_org}'")
+    _API_VERSION_CACHE[target_org] = str(ver)
+    return str(ver)
+
+
 def _rest_get(target_org: str, path: str, timeout: int = 60):
     """GET a REST path (e.g. '/sobjects') under /services/data/vXX.0 using the CLI's auth."""
     import urllib.request
