@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { api, apiStream } from "../api/client";
+import { api, apiStream, openSaveDialog, openDirDialog } from "../api/client";
+import { invoke } from "@tauri-apps/api/core";
+import { apexFileFor, buildExportFiles, metaXml, joinPath, baseName } from "../apexExport";
 import Spinner from "../components/Spinner";
 import DebugLogPanel from "../components/DebugLogPanel";
 
@@ -46,12 +48,69 @@ const QUICK_CHIPS = [
   { label: "⚡ Optimize",   prompt: "Optimize this Apex code for performance and governor limits." },
 ];
 
-function AiPanel({ code, lastLog, onInsert, onClose }) {
+function AiPanel({ code, lastLog, onInsert, onClose, apiVersion }) {
   const [messages,     setMessages]     = useState([]);
   const [input,        setInput]        = useState("");
   const [streaming,    setStreaming]     = useState(false);
   const [streamBuf,    setStreamBuf]    = useState("");
+  const [exportMsg,    setExportMsg]    = useState(null);   // { ok, text }
+  const [overwrite,    setOverwrite]    = useState(null);   // { dir, entries, existing }
   const bottomRef  = useRef(null);
+  const version = apiVersion || "68.0";
+
+  // ── Export generated Apex as deployable source (.cls/.trigger + -meta.xml) ──
+  function flash(msg) {
+    setExportMsg(msg);
+    setTimeout(() => setExportMsg(null), 9000);
+  }
+
+  // One block -> native Save dialog, writes <Name>.cls and <Name>.cls-meta.xml
+  async function saveOne(code) {
+    const f = apexFileFor(code);
+    if (!f) return;
+    const path = await openSaveDialog({
+      title: "Save Apex source",
+      defaultPath: f.fileName,
+      filters: [{ name: f.kind === "trigger" ? "Apex Trigger" : "Apex Class", extensions: [f.ext] }],
+    });
+    if (!path) return; // cancelled
+    try {
+      await invoke("write_file", { path, content: code.trimEnd() + "\n" });
+      await invoke("write_file", { path: `${path}-meta.xml`, content: metaXml(f.kind, version) });
+      flash({ ok: true, text: `Saved ${baseName(path)} + ${baseName(path)}-meta.xml (API ${version})\n${path}` });
+    } catch (e) {
+      flash({ ok: false, text: `Could not save: ${e}` });
+    }
+  }
+
+  async function writeEntries(dir, entries) {
+    try {
+      for (const e of entries) {
+        await invoke("write_file", { path: joinPath(dir, e.name), content: e.content });
+      }
+      flash({ ok: true, text: `Saved ${entries.length} files (API ${version}) to\n${dir}` });
+    } catch (e) {
+      flash({ ok: false, text: `Could not save: ${e}` });
+    }
+  }
+
+  // All saveable blocks in a message -> pick a folder once, write every class + meta
+  async function saveAll(codes) {
+    const files = buildExportFiles(codes, version);
+    if (files.length === 0) return;
+    const dir = await openDirDialog();
+    if (!dir || dir === "__default__") return; // cancelled
+    const entries = files.flatMap((f) => [
+      { name: f.fileName,     content: f.content },
+      { name: f.metaFileName, content: f.meta    },
+    ]);
+    const existing = [];
+    for (const e of entries) {
+      if (await invoke("path_exists", { path: joinPath(dir, e.name) })) existing.push(e.name);
+    }
+    if (existing.length > 0) { setOverwrite({ dir, entries, existing }); return; }
+    await writeEntries(dir, entries);
+  }
 
   // Auto-scroll on new content
   useEffect(() => {
@@ -127,6 +186,8 @@ Be concise and direct. No need to repeat the question.`;
 
   function AssistantMessage({ content }) {
     const blocks = parseBlocks(content);
+    const codes = blocks.filter((b) => b.type === "code").map((b) => b.content);
+    const saveable = buildExportFiles(codes, version);
     return (
       <div className="flex flex-col gap-2">
         {blocks.map((b, i) => {
@@ -157,10 +218,28 @@ Be concise and direct. No need to repeat the question.`;
                 >
                   + Append
                 </button>
+                {apexFileFor(b.content) && (
+                  <button
+                    onClick={() => saveOne(b.content)}
+                    className="px-2 py-0.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded font-medium"
+                    title={`Save as ${apexFileFor(b.content).fileName} (+ meta.xml)`}
+                  >
+                    💾 Save
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
+        {saveable.length >= 2 && !streaming && (
+          <button
+            onClick={() => saveAll(codes)}
+            className="self-start px-2.5 py-1 text-xs bg-emerald-700 hover:bg-emerald-600 text-white rounded font-medium"
+            title={saveable.map((f) => f.fileName).join(", ")}
+          >
+            💾 Save all ({saveable.length} classes + meta files)…
+          </button>
+        )}
       </div>
     );
   }
@@ -249,6 +328,34 @@ Be concise and direct. No need to repeat the question.`;
         <div ref={bottomRef} />
       </div>
 
+      {/* Export status / overwrite confirmation */}
+      {overwrite && (
+        <div className="shrink-0 px-3 py-2 border-t border-amber-700 bg-amber-950/50 text-xs text-amber-200">
+          <p className="font-semibold mb-1">
+            {overwrite.existing.length} file{overwrite.existing.length > 1 ? "s" : ""} already exist in this folder:
+          </p>
+          <p className="font-mono text-amber-300 break-all mb-2">{overwrite.existing.join(", ")}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => { const o = overwrite; setOverwrite(null); await writeEntries(o.dir, o.entries); }}
+              className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-medium"
+            >Overwrite</button>
+            <button
+              onClick={() => setOverwrite(null)}
+              className="px-2.5 py-1 rounded border border-slate-500 text-slate-200 hover:bg-slate-700"
+            >Cancel</button>
+          </div>
+        </div>
+      )}
+      {exportMsg && (
+        <div className={`shrink-0 px-3 py-2 border-t text-xs whitespace-pre-wrap break-all ${
+          exportMsg.ok ? "border-emerald-700 bg-emerald-950/50 text-emerald-200"
+                       : "border-red-700 bg-red-950/50 text-red-200"
+        }`}>
+          {exportMsg.ok ? "✅ " : "❌ "}{exportMsg.text}
+        </div>
+      )}
+
       {/* Input */}
       <div className="shrink-0 px-3 py-2 border-t border-slate-700">
         <div className="flex gap-2 items-end">
@@ -291,6 +398,17 @@ export default function ApexRunner({ org, onApiCall }) {
   const [debugOpen,   setDebugOpen]   = useState(false);
   const [debugLog,    setDebugLog]    = useState([]);
   const [aiOpen,      setAiOpen]      = useState(false);
+  const [apiVersion,  setApiVersion]  = useState("68.0");  // for generated -meta.xml files
+
+  // Look up the connected org's API version in the background (cached by the backend)
+  useEffect(() => {
+    if (!org?.alias) return;
+    let cancelled = false;
+    api(`/api/orgs/${org.alias}/api-version`)
+      .then((d) => { if (!cancelled && d.apiVersion) setApiVersion(d.apiVersion); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [org?.alias]);
 
   function setLevel(key, val) {
     setLevels((prev) => ({ ...prev, [key]: val }));
@@ -514,6 +632,7 @@ export default function ApexRunner({ org, onApiCall }) {
             code={code}
             lastLog={output}
             onInsert={handleAiInsert}
+            apiVersion={apiVersion}
             onClose={() => setAiOpen(false)}
           />
         </div>
